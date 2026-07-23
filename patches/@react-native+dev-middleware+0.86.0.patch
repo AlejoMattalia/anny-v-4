@@ -1,0 +1,13 @@
+diff --git a/node_modules/@react-native/dev-middleware/dist/createDevMiddleware.js b/node_modules/@react-native/dev-middleware/dist/createDevMiddleware.js
+index f995330..ed5ae72 100644
+--- a/node_modules/@react-native/dev-middleware/dist/createDevMiddleware.js
++++ b/node_modules/@react-native/dev-middleware/dist/createDevMiddleware.js
+@@ -81,7 +81,7 @@ function getExperiments(config) {
+   return {
+     enableOpenDebuggerRedirect: config.enableOpenDebuggerRedirect ?? false,
+     enableNetworkInspector: config.enableNetworkInspector ?? false,
+-    enableStandaloneFuseboxShell: config.enableStandaloneFuseboxShell ?? true,
++    enableStandaloneFuseboxShell: config.enableStandaloneFuseboxShell ?? false,
+   };
+ }
+ function createWrappedEventReporter(reporter, logger, experiments) {
