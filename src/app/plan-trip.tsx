@@ -2,7 +2,19 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { searchLocations } from '@/lib/location-search';
@@ -11,6 +23,39 @@ import { addSavedJourney } from '@/lib/saved-journeys';
 import { speak } from '@/lib/voice';
 
 type TravelMode = 'transit' | 'driving' | 'walking';
+
+const GPS_ORIGIN_NAME = 'Mi ubicación actual';
+const GPS_ORIGIN_ADDRESS = 'Ubicación obtenida por GPS';
+
+async function getLocationLabels(latitude: number, longitude: number) {
+  try {
+    const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
+    if (!address) return null;
+
+    const streetAddress = [address.street, address.streetNumber].filter(Boolean).join(' ');
+    const name =
+      streetAddress ||
+      address.name ||
+      address.district ||
+      address.city ||
+      'Origen del viaje';
+    const addressParts = [
+      streetAddress,
+      address.district,
+      address.city,
+      address.region,
+      address.country,
+    ].filter((part, index, parts): part is string => Boolean(part) && parts.indexOf(part) === index);
+
+    return {
+      name,
+      address: address.formattedAddress || addressParts.join(', ') || name,
+    };
+  } catch (error) {
+    console.warn('No se pudo obtener la dirección del origen:', error);
+    return null;
+  }
+}
 
 const travelModes: {
   value: TravelMode;
@@ -50,13 +95,25 @@ export default function PlanTripScreen() {
           });
           const currentItem: LocationItem = {
             id: 'current',
-            name: 'Mi ubicación actual',
-            address: 'Ubicación obtenida por GPS',
+            name: GPS_ORIGIN_NAME,
+            address: GPS_ORIGIN_ADDRESS,
             latitude: locationData.coords.latitude,
             longitude: locationData.coords.longitude,
           };
           setGpsLocation(currentItem);
           setOrigin(currentItem); // Default departure to current location
+
+          const labels = await getLocationLabels(
+            currentItem.latitude,
+            currentItem.longitude,
+          );
+          if (labels) {
+            const locatedItem = { ...currentItem, ...labels };
+            setGpsLocation(locatedItem);
+            setOrigin((selectedOrigin) =>
+              selectedOrigin?.id === 'current' ? locatedItem : selectedOrigin,
+            );
+          }
         } else {
           void speak('Permiso de ubicación denegado. Deberás ingresar el origen de manera manual.');
         }
@@ -168,9 +225,49 @@ export default function PlanTripScreen() {
       return;
     }
     try {
-      await addSavedJourney(origin, destination, journeyTitle.trim(), travelMode);
+      let fixedOrigin = { ...origin };
+      if (origin.id === 'current') {
+        let latitude = origin.latitude;
+        let longitude = origin.longitude;
+
+        try {
+          const currentPosition = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          latitude = currentPosition.coords.latitude;
+          longitude = currentPosition.coords.longitude;
+        } catch (error) {
+          console.warn('Se guardará la última posición GPS disponible:', error);
+        }
+
+        const labels = await getLocationLabels(latitude, longitude);
+
+        fixedOrigin = {
+          ...origin,
+          id: `journey-origin-${Date.now()}`,
+          name: labels?.name || 'Origen del viaje',
+          address:
+            labels?.address ||
+            `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+          latitude,
+          longitude,
+        };
+      }
+
+      const originalDefaultTitle = `De ${origin.name} a ${destination.name}`;
+      const savedTitle =
+        journeyTitle.trim() === originalDefaultTitle
+          ? `De ${fixedOrigin.name} a ${destination.name}`
+          : journeyTitle.trim();
+
+      await addSavedJourney(
+        fixedOrigin,
+        { ...destination },
+        savedTitle,
+        travelMode,
+      );
       setIsSavingJourney(false);
-      void speak(`Viaje guardado correctamente como: ${journeyTitle}.`);
+      void speak(`Viaje guardado correctamente como: ${savedTitle}.`);
     } catch (error) {
       console.error(error);
       void speak('Ocurrió un error al guardar el viaje.');
@@ -443,27 +540,48 @@ export default function PlanTripScreen() {
 
         {/* Save Journey Dialog Modal Overlay */}
         {isSavingJourney && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Guardar viaje</Text>
-              <TextInput
-                autoFocus
-                placeholder="Nombre del viaje"
-                placeholderTextColor="#596474"
-                value={journeyTitle}
-                onChangeText={setJourneyTitle}
-                style={styles.modalInput}
-              />
-              <View style={styles.modalButtons}>
-                <Pressable onPress={() => setIsSavingJourney(false)} style={[styles.modalBtn, styles.modalBtnCancel]}>
-                  <Text style={styles.modalBtnCancelText}>Cancelar</Text>
-                </Pressable>
-                <Pressable onPress={handleConfirmSaveJourney} style={[styles.modalBtn, styles.modalBtnConfirm]}>
-                  <Text style={styles.modalBtnConfirmText}>Guardar</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
+          <Modal
+            animationType="fade"
+            navigationBarTranslucent
+            onRequestClose={() => setIsSavingJourney(false)}
+            statusBarTranslucent
+            transparent
+            visible
+          >
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={styles.modalOverlay}
+            >
+              <ScrollView
+                contentContainerStyle={styles.modalKeyboardContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Guardar viaje</Text>
+                  <Text style={styles.modalInputLabel}>Nombre del recorrido</Text>
+                  <TextInput
+                    accessibilityLabel="Nombre del recorrido"
+                    autoFocus
+                    placeholder="Ejemplo: Viaje al trabajo"
+                    placeholderTextColor="#596474"
+                    returnKeyType="done"
+                    value={journeyTitle}
+                    onChangeText={setJourneyTitle}
+                    onSubmitEditing={() => void handleConfirmSaveJourney()}
+                    style={styles.modalInput}
+                  />
+                  <View style={styles.modalButtons}>
+                    <Pressable onPress={() => setIsSavingJourney(false)} style={[styles.modalBtn, styles.modalBtnCancel]}>
+                      <Text style={styles.modalBtnCancelText}>Cancelar</Text>
+                    </Pressable>
+                    <Pressable onPress={handleConfirmSaveJourney} style={[styles.modalBtn, styles.modalBtnConfirm]}>
+                      <Text style={styles.modalBtnConfirmText}>Guardar</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </Modal>
         )}
       </SafeAreaView>
     </View>
@@ -652,12 +770,15 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: 'rgba(5, 7, 11, 0.85)',
+  },
+  modalKeyboardContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
-    zIndex: 999,
+    paddingVertical: 24,
   },
   modalContent: {
     width: '100%',
@@ -695,6 +816,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     marginBottom: 20,
+  },
+  modalInputLabel: {
+    color: '#D6DCE5',
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 8,
   },
   modalButtons: {
     flexDirection: 'row',

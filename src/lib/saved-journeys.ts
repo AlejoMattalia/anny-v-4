@@ -51,8 +51,8 @@ export async function addSavedJourney(
   const newJourney: SavedJourney = {
     id: Date.now().toString(),
     title,
-    origin,
-    destination,
+    origin: { ...origin },
+    destination: { ...destination },
     travelMode,
     createdAt: new Date().toISOString(),
   };

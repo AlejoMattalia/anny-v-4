@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,7 +7,9 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -42,11 +45,40 @@ interface RouteStep {
   latitude: number;
   longitude: number;
   isCorner: boolean;
+  transit?: {
+    lineName: string;
+    vehicleName: string;
+    departureStop: string;
+    arrivalStop: string;
+    headsign: string;
+    numberOfStops: number;
+    departureTime: string;
+    arrivalTime: string;
+  };
+}
+
+interface CalculatedRoute {
+  id?: string;
+  steps: RouteStep[];
+  distance: number;
+  duration: number;
+  shape: { latitude: number; longitude: number }[];
+  transitLines?: string[];
+}
+
+interface RouteResult extends CalculatedRoute {
+  alternatives?: CalculatedRoute[];
 }
 
 type SimulationPhase = 'idle' | 'intro' | 'running';
 type NavigationPanel = 'instruction' | 'next' | 'progress' | 'awareness';
 type TravelMode = 'transit' | 'driving' | 'walking';
+
+const GOOGLE_MAP_KEY =
+  process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY?.trim() ||
+  (typeof Constants.expoConfig?.extra?.googleMapKey === 'string'
+    ? Constants.expoConfig.extra.googleMapKey.trim()
+    : '');
 
 const INTRO_PHASE_SECONDS = 4;
 const SIMULATION_STEP_MIN_SECONDS = 5;
@@ -72,8 +104,48 @@ function distanceInMeters(
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function distanceToRouteInMeters(
+  position: { latitude: number; longitude: number },
+  route: { latitude: number; longitude: number }[],
+) {
+  if (route.length === 0) return Number.POSITIVE_INFINITY;
+  if (route.length === 1) return distanceInMeters(position, route[0]);
+
+  const metersPerLatitudeDegree = 111_320;
+  const metersPerLongitudeDegree =
+    metersPerLatitudeDegree * Math.cos((position.latitude * Math.PI) / 180);
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 1; index < route.length; index += 1) {
+    const start = route[index - 1];
+    const end = route[index];
+    const startX = (start.longitude - position.longitude) * metersPerLongitudeDegree;
+    const startY = (start.latitude - position.latitude) * metersPerLatitudeDegree;
+    const endX = (end.longitude - position.longitude) * metersPerLongitudeDegree;
+    const endY = (end.latitude - position.latitude) * metersPerLatitudeDegree;
+    const segmentX = endX - startX;
+    const segmentY = endY - startY;
+    const segmentLengthSquared = segmentX ** 2 + segmentY ** 2;
+    const projection =
+      segmentLengthSquared === 0
+        ? 0
+        : clamp(-(startX * segmentX + startY * segmentY) / segmentLengthSquared, 0, 1);
+    const closestX = startX + projection * segmentX;
+    const closestY = startY + projection * segmentY;
+    closestDistance = Math.min(closestDistance, Math.hypot(closestX, closestY));
+  }
+
+  return closestDistance;
+}
+
 function getSimpleStepAnnouncement(step: RouteStep) {
   if (step.type === 'arrival') return 'Llegaste a tu destino.';
+  if (step.transit) {
+    const departureTime = step.transit.departureTime
+      ? ` Sale a las ${step.transit.departureTime}.`
+      : '';
+    return `${step.instruction}${departureTime}`;
+  }
   const distanceText = step.distance > 0 ? ` Continuá ${step.distance} metros.` : '';
   const cornerText = step.isCorner ? 'En la esquina, ' : '';
   return `${cornerText}${step.instruction}${distanceText}`;
@@ -118,7 +190,7 @@ const fetchReverseGeocode = async (lat: number, lon: number) => {
   return 'Ubicación obtenida por GPS';
 };
 
-function decodePolyline6(encoded: string) {
+function decodePolyline(encoded: string, precision = 6) {
   const coordinates: { latitude: number; longitude: number }[] = [];
   let index = 0;
   let latitude = 0;
@@ -145,12 +217,145 @@ function decodePolyline6(encoded: string) {
     longitude += result & 1 ? ~(result >> 1) : result >> 1;
 
     coordinates.push({
-      latitude: latitude / 1e6,
-      longitude: longitude / 1e6,
+      latitude: latitude / 10 ** precision,
+      longitude: longitude / 10 ** precision,
     });
   }
 
   return coordinates;
+}
+
+function cleanGoogleInstruction(instruction: string) {
+  return instruction
+    .replace(/<div[^>]*>/gi, '. ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, 'y')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mapGoogleTransitRoute(route: any, index: number): CalculatedRoute | null {
+  const leg = route.legs?.[0];
+  if (!leg?.steps?.length) return null;
+
+  const steps: RouteStep[] = leg.steps.map((step: any) => {
+    const transitDetails = step.transit_details;
+    const line = transitDetails?.line;
+    const vehicleName =
+      line?.vehicle?.name || line?.vehicle?.type?.toLowerCase() || 'transporte público';
+    const lineName = line?.short_name || line?.name || vehicleName;
+    const departureStop = transitDetails?.departure_stop?.name || 'la parada indicada';
+    const arrivalStop = transitDetails?.arrival_stop?.name || 'la parada indicada';
+    const headsign = transitDetails?.headsign || '';
+    const numberOfStops = transitDetails?.num_stops || 0;
+    const isTransitStep = step.travel_mode === 'TRANSIT' && Boolean(transitDetails);
+    const walkingInstruction =
+      cleanGoogleInstruction(step.html_instructions || '') || 'Continuá caminando.';
+    const instruction = isTransitStep
+      ? `Tomá ${vehicleName} ${lineName} en ${departureStop}${headsign ? ` con dirección ${headsign}` : ''}. Bajá en ${arrivalStop}${numberOfStops > 0 ? ` después de ${numberOfStops} paradas` : ''}.`
+      : walkingInstruction;
+
+    return {
+      instruction,
+      distance: Math.max(0, Math.round(step.distance?.value ?? 0)),
+      duration: Math.max(1, Math.round(step.duration?.value ?? 1)),
+      type: isTransitStep ? 'bus' : 'walking',
+      latitude: step.start_location?.lat ?? leg.start_location?.lat,
+      longitude: step.start_location?.lng ?? leg.start_location?.lng,
+      isCorner: /gire|girá|doble|izquierda|derecha|esquina/i.test(instruction),
+      ...(isTransitStep
+        ? {
+            transit: {
+              lineName,
+              vehicleName,
+              departureStop,
+              arrivalStop,
+              headsign,
+              numberOfStops,
+              departureTime: transitDetails.departure_time?.text || '',
+              arrivalTime: transitDetails.arrival_time?.text || '',
+            },
+          }
+        : {}),
+    };
+  });
+
+  steps.push({
+    instruction: 'Has llegado a tu destino.',
+    distance: 0,
+    duration: 0,
+    type: 'arrival',
+    latitude: leg.end_location.lat,
+    longitude: leg.end_location.lng,
+    isCorner: false,
+  });
+
+  const shape = route.overview_polyline?.points
+    ? decodePolyline(route.overview_polyline.points, 5)
+    : steps.map(({ latitude, longitude }) => ({ latitude, longitude }));
+  const transitLines = Array.from(
+    new Set(
+      steps
+        .map((step) => step.transit?.lineName)
+        .filter((lineName): lineName is string => Boolean(lineName)),
+    ),
+  );
+
+  return {
+    id: `google-transit-${index}`,
+    steps,
+    distance: Math.max(0, Math.round(leg.distance?.value ?? 0)),
+    duration: Math.max(0, Math.round(leg.duration?.value ?? 0)),
+    shape,
+    transitLines,
+  };
+}
+
+function mapGoogleDrivingRoute(route: any, index: number): CalculatedRoute | null {
+  const leg = route.legs?.[0];
+  if (!leg?.steps?.length) return null;
+
+  const steps: RouteStep[] = leg.steps.map((step: any) => {
+    const instruction =
+      cleanGoogleInstruction(step.html_instructions || '') ||
+      'Continuá por la ruta indicada.';
+
+    return {
+      instruction,
+      distance: Math.max(0, Math.round(step.distance?.value ?? 0)),
+      duration: Math.max(1, Math.round(step.duration?.value ?? 1)),
+      type: 'driving',
+      latitude: step.start_location?.lat ?? leg.start_location?.lat,
+      longitude: step.start_location?.lng ?? leg.start_location?.lng,
+      isCorner: /gire|girá|doble|izquierda|derecha|esquina/i.test(instruction),
+    };
+  });
+
+  steps.push({
+    instruction: 'Has llegado a tu destino.',
+    distance: 0,
+    duration: 0,
+    type: 'arrival',
+    latitude: leg.end_location.lat,
+    longitude: leg.end_location.lng,
+    isCorner: false,
+  });
+
+  return {
+    id: `google-driving-${index}`,
+    steps,
+    distance: Math.max(0, Math.round(leg.distance?.value ?? 0)),
+    duration: Math.max(
+      0,
+      Math.round(leg.duration_in_traffic?.value ?? leg.duration?.value ?? 0),
+    ),
+    shape: route.overview_polyline?.points
+      ? decodePolyline(route.overview_polyline.points, 5)
+      : steps.map(({ latitude, longitude }) => ({ latitude, longitude })),
+  };
 }
 
 function toMercator(point: { latitude: number; longitude: number }) {
@@ -196,22 +401,105 @@ const fetchRoute = async (
   origin: { latitude: number; longitude: number },
   destination: { latitude: number; longitude: number },
   travelMode: TravelMode,
-): Promise<{
-  steps: RouteStep[];
-  distance: number;
-  duration: number;
-  shape: { latitude: number; longitude: number }[];
-}> => {
+): Promise<RouteResult> => {
   try {
-    const costing =
-      travelMode === 'walking' ? 'pedestrian' : travelMode === 'transit' ? 'multimodal' : 'auto';
+    if (travelMode === 'transit') {
+      const googleMapsApiKey = GOOGLE_MAP_KEY;
+      if (!googleMapsApiKey) {
+        throw new Error('Falta configurar la clave de Google Maps para transporte público.');
+      }
+
+      const transitParams = new URLSearchParams({
+        origin: `${origin.latitude},${origin.longitude}`,
+        destination: `${destination.latitude},${destination.longitude}`,
+        mode: 'transit',
+        alternatives: 'true',
+        departure_time: 'now',
+        transit_routing_preference: 'less_walking',
+        language: 'es-419',
+        key: googleMapsApiKey,
+      });
+      const transitResponse = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json?${transitParams.toString()}`,
+      );
+      if (!transitResponse.ok) {
+        throw new Error('Google no pudo calcular las opciones de transporte.');
+      }
+
+      const transitData = await transitResponse.json();
+      const alternatives = (transitData.routes ?? [])
+        .map(mapGoogleTransitRoute)
+        .filter((route: CalculatedRoute | null): route is CalculatedRoute => Boolean(route))
+        .filter((route: CalculatedRoute) => route.transitLines?.length);
+
+      if (transitData.status !== 'OK' || alternatives.length === 0) {
+        throw new Error(
+          transitData.error_message ||
+            'No hay recorridos de transporte público disponibles para este trayecto.',
+        );
+      }
+
+      alternatives.sort((first: CalculatedRoute, second: CalculatedRoute) => {
+        return first.duration - second.duration;
+      });
+
+      return {
+        ...alternatives[0],
+        alternatives,
+      };
+    }
+
+    if (travelMode === 'driving') {
+      const googleMapsApiKey = GOOGLE_MAP_KEY;
+      if (!googleMapsApiKey) {
+        throw new Error('Falta configurar la clave de Google Maps para el viaje en auto.');
+      }
+
+      const drivingParams = new URLSearchParams({
+        origin: `${origin.latitude},${origin.longitude}`,
+        destination: `${destination.latitude},${destination.longitude}`,
+        mode: 'driving',
+        alternatives: 'true',
+        departure_time: 'now',
+        traffic_model: 'best_guess',
+        language: 'es-419',
+        key: googleMapsApiKey,
+      });
+      const drivingResponse = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json?${drivingParams.toString()}`,
+      );
+      if (!drivingResponse.ok) {
+        throw new Error('Google no pudo calcular la ruta en auto.');
+      }
+
+      const drivingData = await drivingResponse.json();
+      const alternatives = (drivingData.routes ?? [])
+        .map(mapGoogleDrivingRoute)
+        .filter((route: CalculatedRoute | null): route is CalculatedRoute => Boolean(route));
+
+      if (drivingData.status !== 'OK' || alternatives.length === 0) {
+        throw new Error(
+          drivingData.error_message || 'No hay rutas en auto disponibles para este trayecto.',
+        );
+      }
+
+      alternatives.sort((first: CalculatedRoute, second: CalculatedRoute) => {
+        return first.duration - second.duration;
+      });
+
+      return {
+        ...alternatives[0],
+        alternatives,
+      };
+    }
+
+    const costing = 'pedestrian';
     const routeRequest = {
       locations: [
         { lat: origin.latitude, lon: origin.longitude },
         { lat: destination.latitude, lon: destination.longitude },
       ],
       costing,
-      ...(travelMode === 'transit' ? { date_time: { type: 0 } } : {}),
       directions_options: { language: 'es-ES', units: 'kilometers' },
     };
     const url = `https://valhalla1.openstreetmap.de/route?json=${encodeURIComponent(JSON.stringify(routeRequest))}`;
@@ -223,21 +511,16 @@ const fetchRoute = async (
     }
 
     const leg = data.trip.legs[0];
-    const shape = decodePolyline6(leg.shape);
+    const shape = decodePolyline(leg.shape);
     const maneuvers = leg.maneuvers ?? [];
     const steps: RouteStep[] = maneuvers
       .filter((maneuver: any) => maneuver.type !== 4)
       .map((maneuver: any) => {
         const point = shape[maneuver.begin_shape_index] ?? origin;
         const instruction = maneuver.instruction || 'Continuá por la ruta indicada.';
-        const type: RouteStep['type'] =
-          travelMode === 'transit'
-            ? 'bus'
-            : travelMode === 'driving'
-              ? 'driving'
-              : instruction.toLowerCase().includes('cruce')
-                ? 'crossing'
-                : 'walking';
+        const type: RouteStep['type'] = instruction.toLowerCase().includes('cruce')
+          ? 'crossing'
+          : 'walking';
 
         return {
           instruction,
@@ -268,7 +551,17 @@ const fetchRoute = async (
       shape,
     };
   } catch (error) {
-    console.warn('Error calculating real OSRM route:', error);
+    console.warn('Error al calcular la ruta real:', error);
+    if (travelMode === 'transit') {
+      throw error instanceof Error
+        ? error
+        : new Error('No se pudieron cargar las opciones de transporte público.');
+    }
+    if (travelMode === 'driving') {
+      throw error instanceof Error
+        ? error
+        : new Error('No se pudo calcular la ruta en auto con Google Maps.');
+    }
     throw new Error('No se pudo calcular la ruta real entre las direcciones seleccionadas.');
   }
 };
@@ -308,6 +601,9 @@ export default function StartTripScreen() {
   const [isSearchingResults, setIsSearchingResults] = useState(false);
   const voiceSearchSession = useRef(0);
   const lastApproachAnnouncement = useRef('');
+  const consecutiveOffRouteReadings = useRef(0);
+  const reroutingInProgress = useRef(false);
+  const lastRerouteStartedAt = useRef(0);
 
   // Navigation states
   const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
@@ -317,10 +613,13 @@ export default function StartTripScreen() {
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [routeError, setRouteError] = useState('');
   const [routeShape, setRouteShape] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [transitAlternatives, setTransitAlternatives] = useState<CalculatedRoute[]>([]);
+  const [selectedTransitRouteId, setSelectedTransitRouteId] = useState('');
   const [liveDistanceToNextStep, setLiveDistanceToNextStep] = useState<number | null>(null);
   const [simulationPhase, setSimulationPhase] = useState<SimulationPhase>('idle');
   const [simulationTick, setSimulationTick] = useState(Date.now());
   const [stepStartedAt, setStepStartedAt] = useState<number | null>(null);
+  const [isRecalculatingRoute, setIsRecalculatingRoute] = useState(false);
 
   // Overlay states
   const [showWhereAmI, setShowWhereAmI] = useState(false);
@@ -381,6 +680,8 @@ export default function StartTripScreen() {
       setTotalDistance(data.distance);
       setTotalDuration(data.duration);
       setRouteShape(data.shape);
+      setTransitAlternatives(data.alternatives ?? []);
+      setSelectedTransitRouteId(data.id ?? '');
       setCurrentStepIndex(0);
       setState('trip_summary');
 
@@ -397,9 +698,15 @@ export default function StartTripScreen() {
       setTotalDistance(0);
       setTotalDuration(0);
       setRouteShape([]);
+      setTransitAlternatives([]);
+      setSelectedTransitRouteId('');
       setRouteError(message);
       setState('trip_summary');
-      void speak(`${message} Revisá tu conexión e intentá nuevamente.`);
+      void speak(
+        travelMode === 'transit'
+          ? `${message} Podés abrir el recorrido de transporte público en Google Maps.`
+          : `${message} Revisá tu conexión e intentá nuevamente.`,
+      );
     } finally {
       setLoadingRoute(false);
     }
@@ -418,6 +725,62 @@ export default function StartTripScreen() {
 
     if (originCoords) {
       void loadRoute(originCoords, selectedDest);
+    }
+  };
+
+  const selectTransitRoute = (route: CalculatedRoute) => {
+    setRouteSteps(route.steps);
+    setTotalDistance(route.distance);
+    setTotalDuration(route.duration);
+    setRouteShape(route.shape);
+    setSelectedTransitRouteId(route.id ?? '');
+    setCurrentStepIndex(0);
+    setLiveDistanceToNextStep(null);
+
+    const lines =
+      route.transitLines && route.transitLines.length > 0
+        ? ` Líneas: ${route.transitLines.join(', ')}.`
+        : '';
+    void speak(
+      `Opción seleccionada. Duración aproximada de ${Math.max(1, Math.round(route.duration / 60))} minutos.${lines}`,
+    );
+  };
+
+  const openGoogleDirections = async () => {
+    if (!selectedDest) return;
+
+    const originCoords =
+      params.originLat && params.originLng
+        ? {
+            latitude: parseFloat(params.originLat as string),
+            longitude: parseFloat(params.originLng as string),
+          }
+        : userLocation;
+
+    if (!originCoords) {
+      void speak('Todavía no pude obtener el punto de partida.');
+      return;
+    }
+
+    const googleDirectionsParams = new URLSearchParams({
+      api: '1',
+      origin: `${originCoords.latitude},${originCoords.longitude}`,
+      destination: `${selectedDest.latitude},${selectedDest.longitude}`,
+      travelmode: travelMode === 'driving' ? 'driving' : 'transit',
+    });
+    const googleDirectionsUrl =
+      `https://www.google.com/maps/dir/?${googleDirectionsParams.toString()}`;
+
+    try {
+      await Linking.openURL(googleDirectionsUrl);
+      void speak(
+        travelMode === 'driving'
+          ? 'Abriendo la ruta en auto.'
+          : 'Abriendo el recorrido de transporte público.',
+      );
+    } catch (error) {
+      console.warn('No se pudo abrir el recorrido en Google Maps:', error);
+      void speak('No pude abrir la aplicación de mapas. Intentá nuevamente.');
     }
   };
 
@@ -527,6 +890,8 @@ export default function StartTripScreen() {
     setStepStartedAt(null);
     setSimulationTick(Date.now());
     setLastAnnouncedSceneKey('');
+    setIsRecalculatingRoute(false);
+    consecutiveOffRouteReadings.current = 0;
   };
 
   const goToStep = (index: number, announce = true) => {
@@ -535,6 +900,7 @@ export default function StartTripScreen() {
 
     setCurrentStepIndex(index);
     lastApproachAnnouncement.current = '';
+    setLiveDistanceToNextStep(null);
     setStepStartedAt(Date.now());
     setSimulationTick(Date.now());
 
@@ -623,6 +989,17 @@ export default function StartTripScreen() {
     }
   };
 
+  const handleReturnFromArrival = () => {
+    const lastGuidanceIndex = Math.max(routeSteps.length - 2, 0);
+    const lastGuidanceStep = routeSteps[lastGuidanceIndex];
+    if (!lastGuidanceStep) return;
+
+    setState('navigating');
+    setSimulationPhase('running');
+    goToStep(lastGuidanceIndex, false);
+    void speak(`Volviendo al tramo anterior. ${getSimpleStepAnnouncement(lastGuidanceStep)}`);
+  };
+
   const speakCurrentInstruction = () => {
     if (routeSteps[currentStepIndex]) {
       void speak(getSimpleStepAnnouncement(routeSteps[currentStepIndex]));
@@ -648,6 +1025,61 @@ export default function StartTripScreen() {
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
 
+    const recalculateRouteFrom = async (origin: {
+      latitude: number;
+      longitude: number;
+    }) => {
+      if (
+        !selectedDest ||
+        reroutingInProgress.current ||
+        Date.now() - lastRerouteStartedAt.current < 15_000
+      ) {
+        return;
+      }
+
+      reroutingInProgress.current = true;
+      lastRerouteStartedAt.current = Date.now();
+      consecutiveOffRouteReadings.current = 0;
+      setIsRecalculatingRoute(true);
+      void speak('Te desviaste del camino. Calculando una nueva ruta.');
+
+      try {
+        const data = await fetchRoute(origin, selectedDest, travelMode);
+        if (cancelled) return;
+
+        setRouteSteps(data.steps);
+        setTotalDistance(data.distance);
+        setTotalDuration(data.duration);
+        setRouteShape(data.shape);
+        setTransitAlternatives(data.alternatives ?? []);
+        setSelectedTransitRouteId(data.id ?? '');
+        setCurrentStepIndex(0);
+        setLiveDistanceToNextStep(null);
+        lastApproachAnnouncement.current = '';
+        setStepStartedAt(Date.now());
+        setSimulationTick(Date.now());
+
+        const firstStep = data.steps[0];
+        void speak(
+          firstStep
+            ? `Ruta recalculada. ${getSimpleStepAnnouncement(firstStep)}`
+            : 'Ruta recalculada.',
+        );
+      } catch (error) {
+        console.warn('No se pudo recalcular la ruta después del desvío:', error);
+        if (!cancelled) {
+          void speak(
+            'No pude calcular una nueva ruta. Seguiré intentando mientras avanzás.',
+          );
+        }
+      } finally {
+        reroutingInProgress.current = false;
+        if (!cancelled) {
+          setIsRecalculatingRoute(false);
+        }
+      }
+    };
+
     void Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
@@ -663,6 +1095,32 @@ export default function StartTripScreen() {
         };
         setUserLocation(coords);
         setSimulationTick(Date.now());
+
+        if (reroutingInProgress.current) {
+          return;
+        }
+
+        const gpsAccuracy = position.coords.accuracy ?? 20;
+        const offRouteThreshold = Math.max(
+          travelMode === 'walking' ? 35 : travelMode === 'driving' ? 55 : 65,
+          gpsAccuracy * 2,
+        );
+        const routeDistance = distanceToRouteInMeters(coords, routeShape);
+        const hasReliablePosition = gpsAccuracy <= 80 && routeShape.length > 1;
+
+        if (hasReliablePosition && routeDistance > offRouteThreshold) {
+          consecutiveOffRouteReadings.current += 1;
+        } else {
+          consecutiveOffRouteReadings.current = 0;
+        }
+
+        if (
+          consecutiveOffRouteReadings.current >= 2 &&
+          !reroutingInProgress.current
+        ) {
+          void recalculateRouteFrom(coords);
+          return;
+        }
 
         const targetIndex = Math.min(currentStepIndex + 1, routeSteps.length - 1);
         const targetStep = routeSteps[targetIndex];
@@ -712,7 +1170,15 @@ export default function StartTripScreen() {
       cancelled = true;
       subscription?.remove();
     };
-  }, [currentStepIndex, isSimulationEntry, routeSteps, state]);
+  }, [
+    currentStepIndex,
+    isSimulationEntry,
+    routeShape,
+    routeSteps,
+    selectedDest,
+    state,
+    travelMode,
+  ]);
 
   // Compute remaining distance & duration dynamically
   const remainingDistance = useMemo(() => {
@@ -1137,17 +1603,92 @@ export default function StartTripScreen() {
               </View>
             ) : routeError ? (
               <View style={styles.routeErrorCard}>
-                <Ionicons color="#FF4E72" name="warning-outline" size={34} />
-                <Text style={styles.routeErrorTitle}>No se pudo cargar la ruta real</Text>
+                <Ionicons
+                  color={travelMode === 'transit' ? '#208AEF' : '#FF4E72'}
+                  name={travelMode === 'transit' ? 'bus-outline' : 'warning-outline'}
+                  size={34}
+                />
+                <Text style={styles.routeErrorTitle}>
+                  {travelMode === 'transit'
+                    ? 'Abrir recorrido de transporte público'
+                    : 'No se pudo cargar la ruta real'}
+                </Text>
                 <Text style={styles.routeErrorText}>{routeError}</Text>
-                <Pressable accessibilityLabel="Reintentar calcular ruta" onPress={retryRoute} style={styles.retryRouteButton}>
+                {travelMode === 'transit' && (
+                  <Pressable
+                    accessibilityLabel="Abrir recorrido de transporte público en Google Maps"
+                    onPress={openGoogleDirections}
+                    style={styles.retryRouteButton}
+                  >
+                    <Ionicons color="#FFFFFF" name="map-outline" size={18} />
+                    <Text style={styles.retryRouteButtonText}>Abrir transporte público</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  accessibilityLabel="Reintentar calcular ruta"
+                  onPress={retryRoute}
+                  style={[
+                    styles.retryRouteButton,
+                    travelMode === 'transit' && styles.retryRouteSecondaryButton,
+                  ]}
+                >
                   <Ionicons color="#FFFFFF" name="refresh" size={18} />
                   <Text style={styles.retryRouteButtonText}>Reintentar</Text>
                 </Pressable>
               </View>
             ) : (
               <>
-                <Text style={styles.summaryLabel}>Recorrido Recomendado (OSRM)</Text>
+                <Text style={styles.summaryLabel}>Recorrido recomendado</Text>
+                {travelMode === 'transit' && transitAlternatives.length > 1 && (
+                  <View style={styles.transitAlternatives}>
+                    <Text style={styles.transitAlternativesTitle}>
+                      {transitAlternatives.length} opciones disponibles
+                    </Text>
+                    <ScrollView
+                      contentContainerStyle={styles.transitAlternativesList}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                    >
+                      {transitAlternatives.map((route, index) => {
+                        const isSelected = route.id === selectedTransitRouteId;
+                        return (
+                          <Pressable
+                            accessibilityLabel={`Opción ${index + 1}. ${Math.max(1, Math.round(route.duration / 60))} minutos. Líneas ${route.transitLines?.join(', ') || 'disponibles'}`}
+                            key={route.id}
+                            onPress={() => selectTransitRoute(route)}
+                            style={[
+                              styles.transitAlternativeCard,
+                              isSelected && styles.transitAlternativeCardSelected,
+                            ]}
+                          >
+                            <View style={styles.transitAlternativeHeader}>
+                              <Text style={styles.transitAlternativeName}>
+                                Opción {index + 1}
+                              </Text>
+                              {isSelected && (
+                                <Ionicons color="#4DAA57" name="checkmark-circle" size={18} />
+                              )}
+                            </View>
+                            <Text style={styles.transitAlternativeTime}>
+                              {Math.max(1, Math.round(route.duration / 60))} min ·{' '}
+                              {route.distance > 1000
+                                ? `${(route.distance / 1000).toFixed(1)} km`
+                                : `${route.distance} m`}
+                            </Text>
+                            <View style={styles.transitLinesRow}>
+                              {route.transitLines?.map((lineName) => (
+                                <View key={`${route.id}-${lineName}`} style={styles.transitLineBadge}>
+                                  <Ionicons color="#FFFFFF" name="bus-outline" size={13} />
+                                  <Text style={styles.transitLineBadgeText}>{lineName}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
                 <View style={styles.routeOptionCard}>
                   <View style={styles.routePathRow}>
                     <View style={styles.routeSegment}>
@@ -1185,6 +1726,13 @@ export default function StartTripScreen() {
                       </Text>
                     </View>
                   </View>
+                  {travelMode !== 'walking' && (
+                    <Text style={styles.googleMapsAttribution}>
+                      {travelMode === 'transit'
+                        ? 'Datos de transporte: Google Maps'
+                        : 'Rutas y tráfico: Google Maps'}
+                    </Text>
+                  )}
                 </View>
 
                 <Pressable onPress={handleStartNav} style={styles.startNavButton}>
@@ -1241,11 +1789,13 @@ export default function StartTripScreen() {
             <View style={styles.simulationStatusCard}>
               <View style={styles.simulationStatusRow}>
                 <Text style={styles.simulationStatusLabel}>
-                  {simulationPhase === 'intro'
-                    ? 'Listo para comenzar'
-                    : isSimulationEntry
-                      ? 'Simulación en curso'
-                      : 'Navegación GPS en tiempo real'}
+                  {isRecalculatingRoute
+                    ? 'Recalculando ruta'
+                    : simulationPhase === 'intro'
+                      ? 'Listo para comenzar'
+                      : isSimulationEntry
+                        ? 'Simulación en curso'
+                        : 'Navegación GPS en tiempo real'}
                 </Text>
                 <Text style={styles.simulationStatusValue}>
                   {Math.round(overallProgress * 100)}%
@@ -1255,13 +1805,15 @@ export default function StartTripScreen() {
                 <View style={[styles.simulationProgressFill, { width: `${Math.max(overallProgress * 100, 4)}%` }]} />
               </View>
               <Text style={styles.simulationStatusHint}>
-                {simulationPhase === 'intro'
-                  ? `La guía arranca en ${introCountdown} s`
-                  : isSimulationEntry
-                    ? `Tramo ${currentStepIndex + 1} de ${Math.max(routeSteps.length - 1, 1)}`
-                    : liveDistanceToNextStep === null
-                      ? 'Esperando una posición GPS precisa...'
-                      : `Próxima indicación en ${liveDistanceToNextStep} m`}
+                {isRecalculatingRoute
+                  ? 'Detectamos un desvío. Buscando el mejor camino desde tu ubicación...'
+                  : simulationPhase === 'intro'
+                    ? `La guía arranca en ${introCountdown} s`
+                    : isSimulationEntry
+                      ? `Tramo ${currentStepIndex + 1} de ${Math.max(routeSteps.length - 1, 1)}`
+                      : liveDistanceToNextStep === null
+                        ? 'Esperando una posición GPS precisa...'
+                        : `Próxima indicación en ${liveDistanceToNextStep} m`}
               </Text>
             </View>
 
@@ -1292,7 +1844,22 @@ export default function StartTripScreen() {
                     />
                   </View>
                   <Text style={styles.navDirectiveText}>{currentStep.instruction}</Text>
-                  {currentStep.distance > 0 && (
+                  {currentStep.transit ? (
+                    <View style={styles.activeTransitDetails}>
+                      <View style={styles.transitLineBadge}>
+                        <Ionicons color="#FFFFFF" name="bus-outline" size={14} />
+                        <Text style={styles.transitLineBadgeText}>
+                          {currentStep.transit.lineName}
+                        </Text>
+                      </View>
+                      <Text style={styles.navDirectiveSub}>
+                        Salida {currentStep.transit.departureTime || 'según el horario disponible'}
+                        {currentStep.transit.arrivalTime
+                          ? ` · Llegada ${currentStep.transit.arrivalTime}`
+                          : ''}
+                      </Text>
+                    </View>
+                  ) : currentStep.distance > 0 && (
                     <Text style={styles.navDirectiveSub}>
                       {travelMode === 'walking' ? 'Avanzá' : 'Continuá'} {currentStep.distance} metros durante este tramo
                     </Text>
@@ -1388,12 +1955,24 @@ export default function StartTripScreen() {
 
             {/* Quick Menu Button Trigger */}
             <Pressable
-              accessibilityLabel="Ver mapa del trayecto"
-              onPress={() => setShowRouteMap(true)}
+              accessibilityLabel={
+                travelMode !== 'walking'
+                  ? `Ver ${travelMode === 'driving' ? 'ruta en auto' : 'transporte público'} en Google Maps`
+                  : 'Ver mapa del trayecto'
+              }
+              onPress={
+                travelMode !== 'walking'
+                  ? openGoogleDirections
+                  : () => setShowRouteMap(true)
+              }
               style={styles.routeMapTriggerBtn}
             >
               <Ionicons color="#FFFFFF" name="map-outline" size={22} />
-              <Text style={styles.routeMapTriggerText}>Ver mapa y trayecto</Text>
+              <Text style={styles.routeMapTriggerText}>
+                {travelMode !== 'walking'
+                  ? `Ver ${travelMode === 'driving' ? 'ruta' : 'transporte'} en Google Maps`
+                  : 'Ver mapa y trayecto'}
+              </Text>
             </Pressable>
 
             <Pressable
@@ -1405,30 +1984,42 @@ export default function StartTripScreen() {
               <Text style={styles.quickMenuTriggerText}>Menú rápido</Text>
             </Pressable>
 
-            {/* Simulation Steps Bar */}
-            {isSimulationEntry && <View style={styles.simulationControlBar}>
+            {/* Manual controls are always available in case GPS or a route step gets stuck. */}
+            <View style={styles.navigationControlBar}>
               <Pressable
+                accessibilityLabel="Volver a la indicación anterior"
                 disabled={currentStepIndex === 0 || simulationPhase === 'intro'}
                 onPress={handlePrevStep}
-                style={[styles.simStepBtn, (currentStepIndex === 0 || simulationPhase === 'intro') && styles.simStepBtnDisabled]}
+                style={[
+                  styles.navigationStepBtn,
+                  (currentStepIndex === 0 || simulationPhase === 'intro') &&
+                    styles.navigationStepBtnDisabled,
+                ]}
               >
                 <Ionicons color="#FFFFFF" name="chevron-back" size={16} />
-                <Text style={styles.simStepBtnText}>Anterior</Text>
+                <Text style={styles.navigationStepBtnText}>Anterior</Text>
               </Pressable>
-              <Text style={styles.simStepIndicator}>
+              <Text
+                accessibilityLabel={`Indicación ${currentStepIndex + 1} de ${Math.max(routeSteps.length - 1, 1)}`}
+                style={styles.navigationStepIndicator}
+              >
                 {simulationPhase === 'intro'
                   ? 'Preparando'
                   : `${currentStepIndex + 1} / ${Math.max(routeSteps.length - 1, 1)}`}
               </Text>
               <Pressable
+                accessibilityLabel="Ir a la indicación siguiente"
                 disabled={simulationPhase === 'intro'}
                 onPress={handleNextStep}
-                style={[styles.simStepBtn, simulationPhase === 'intro' && styles.simStepBtnDisabled]}
+                style={[
+                  styles.navigationStepBtn,
+                  simulationPhase === 'intro' && styles.navigationStepBtnDisabled,
+                ]}
               >
-                <Text style={styles.simStepBtnText}>Siguiente</Text>
+                <Text style={styles.navigationStepBtnText}>Siguiente</Text>
                 <Ionicons color="#FFFFFF" name="chevron-forward" size={16} />
               </Pressable>
-            </View>}
+            </View>
           </View>
         )}
 
@@ -1447,7 +2038,16 @@ export default function StartTripScreen() {
             <Text style={styles.navDirectiveText}>Has llegado</Text>
             <Text style={styles.navDirectiveSub}>Tu destino está frente a ti</Text>
 
-            <View style={[styles.navActionsRow, { marginTop: 40, width: '100%' }]}>
+            <Pressable
+              accessibilityLabel="Volver a la indicación anterior"
+              onPress={handleReturnFromArrival}
+              style={[styles.navigationStepBtn, styles.arrivalPreviousBtn]}
+            >
+              <Ionicons color="#FFFFFF" name="chevron-back" size={18} />
+              <Text style={styles.navigationStepBtnText}>Volver a la indicación anterior</Text>
+            </Pressable>
+
+            <View style={[styles.navActionsRow, { width: '100%' }]}>
               <Pressable
                 accessibilityLabel="Buscar entrada accesible"
                 onPress={() => speak('Buscando entrada accesible para personas con discapacidad.')}
@@ -2048,6 +2648,72 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 8,
   },
+  transitAlternatives: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  transitAlternativesList: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  transitAlternativesTitle: {
+    color: '#D9DEEA',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  transitAlternativeCard: {
+    width: 190,
+    borderWidth: 1,
+    borderColor: '#1D2633',
+    borderRadius: 8,
+    backgroundColor: '#0C1118',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  transitAlternativeCardSelected: {
+    borderColor: '#4DAA57',
+    backgroundColor: 'rgba(77, 170, 87, 0.08)',
+  },
+  transitAlternativeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  transitAlternativeName: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  transitAlternativeTime: {
+    color: '#AEB7C7',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  transitLinesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  transitLineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 12,
+    backgroundColor: '#208AEF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  transitLineBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  activeTransitDetails: {
+    alignItems: 'center',
+    gap: 10,
+  },
   routeOptionCard: {
     borderWidth: 1,
     borderColor: '#6A29FF',
@@ -2056,6 +2722,12 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 14,
     marginBottom: 24,
+  },
+  googleMapsAttribution: {
+    color: '#7F8A9B',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   routeErrorCard: {
     flex: 1,
@@ -2093,6 +2765,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '900',
+  },
+  retryRouteSecondaryButton: {
+    backgroundColor: '#1E293B',
+    marginTop: 10,
   },
   routePathRow: {
     flexDirection: 'row',
@@ -2395,39 +3071,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
-  // Simulation Step controls
-  simulationControlBar: {
+  // Manual step controls
+  navigationControlBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(106, 41, 255, 0.06)',
+    backgroundColor: 'rgba(32, 138, 239, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(106, 41, 255, 0.2)',
+    borderColor: 'rgba(32, 138, 239, 0.3)',
     borderRadius: 8,
     padding: 10,
   },
-  simStepBtn: {
+  navigationStepBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#208AEF',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 15,
   },
-  simStepBtnDisabled: {
+  navigationStepBtnDisabled: {
     backgroundColor: '#1E293B',
     opacity: 0.5,
   },
-  simStepBtnText: {
+  navigationStepBtnText: {
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '900',
   },
-  simStepIndicator: {
-    color: '#B18CFF',
+  navigationStepIndicator: {
+    color: '#8FC7FF',
     fontSize: 12,
-    fontWeight: '950',
+    fontWeight: '900',
+  },
+  arrivalPreviousBtn: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    marginTop: 40,
+    marginBottom: 12,
+    minHeight: 48,
   },
   // Overlays / Modals
   overlayModal: {

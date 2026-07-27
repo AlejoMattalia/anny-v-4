@@ -41,12 +41,12 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start",
+    "start": "node ./scripts/with-google-map-key.js start",
     "postinstall": "patch-package",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web",
+    "android": "node ./scripts/with-google-map-key.js run:android",
+    "ios": "node ./scripts/with-google-map-key.js run:ios",
+    "web": "node ./scripts/with-google-map-key.js start --web",
     "lint": "expo lint"
   },
   "private": true
