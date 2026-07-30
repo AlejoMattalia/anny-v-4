@@ -89,9 +89,6 @@ export default function SettingsScreen() {
     void loadPermissions();
     void loadSavedSettings();
 
-    // Greet the user once on mount
-    void speak('Configuraciones. Podés revisar permisos, conexión de anteojos, escaneo y simulación.');
-
     // Listen for AppState changes to refresh permissions when returning from system settings
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
@@ -316,8 +313,11 @@ export default function SettingsScreen() {
                 </Text>
               </Pressable>
             </View>
-            <Pressable accessibilityLabel="Reiniciar conexión de anteojos" onPress={() => speak('Reiniciando conexión de anteojos.')} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Reiniciar conexión</Text>
+            <Pressable
+              accessibilityLabel="Administrar dispositivos Bluetooth"
+              onPress={() => router.push('/bluetooth-devices')}
+              style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Administrar dispositivos</Text>
             </Pressable>
           </View>
 

@@ -129,13 +129,7 @@ export default function PlanTripScreen() {
 
     void initializeLocation();
     void loadSaved();
-
-    void speak(
-      isSimulationMode
-        ? 'Simulación de viaje. Seleccioná el origen y el destino exactos que querés simular.'
-        : 'Planificación de viaje. Por defecto, el origen es tu ubicación actual. Selecciona destino para continuar.',
-    );
-  }, [isSimulationMode]);
+  }, []);
 
   // Debounced search logic for Nominatim API
   useEffect(() => {

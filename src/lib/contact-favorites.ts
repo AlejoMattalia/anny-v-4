@@ -1,18 +1,14 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import { readPersistentValue, writePersistentValue } from './persistent-storage';
 
-const favoritesFile = `${FileSystem.documentDirectory}anny-contact-favorites.json`;
+const favoritesKey = 'anny-contact-favorites.json';
 
 export async function getFavoriteContactNumbers() {
   try {
-    const info = await FileSystem.getInfoAsync(favoritesFile);
-
-    if (!info.exists) {
+    const rawFavorites = await readPersistentValue(favoritesKey);
+    if (rawFavorites === null) {
       return [];
     }
 
-    const rawFavorites = await FileSystem.readAsStringAsync(favoritesFile, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
     const favorites = JSON.parse(rawFavorites) as unknown;
 
     return Array.isArray(favorites) ? favorites.filter((phoneNumber): phoneNumber is string => typeof phoneNumber === 'string') : [];
@@ -22,7 +18,5 @@ export async function getFavoriteContactNumbers() {
 }
 
 export async function saveFavoriteContactNumbers(phoneNumbers: string[]) {
-  await FileSystem.writeAsStringAsync(favoritesFile, JSON.stringify(phoneNumbers), {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  await writePersistentValue(favoritesKey, JSON.stringify(phoneNumbers));
 }

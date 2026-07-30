@@ -1,8 +1,11 @@
-import * as FileSystem from 'expo-file-system/legacy';
-
 import { appApiUrl } from '@/lib/api';
+import {
+  deletePersistentValue,
+  readPersistentValue,
+  writePersistentValue,
+} from '@/lib/persistent-storage';
 
-const authSessionFile = `${FileSystem.documentDirectory}anny-auth-session.json`;
+const authSessionKey = 'anny-auth-session.json';
 const requestTimeoutMs = 10000;
 
 export type AuthUser = {
@@ -138,22 +141,16 @@ export async function loginWithEmail(email: string, password: string) {
 }
 
 export async function saveAuthSession(session: AuthSession) {
-  await FileSystem.writeAsStringAsync(authSessionFile, JSON.stringify(session), {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  await writePersistentValue(authSessionKey, JSON.stringify(session));
 }
 
 export async function getAuthSession() {
   try {
-    const info = await FileSystem.getInfoAsync(authSessionFile);
-
-    if (!info.exists) {
+    const rawSession = await readPersistentValue(authSessionKey);
+    if (rawSession === null) {
       return null;
     }
 
-    const rawSession = await FileSystem.readAsStringAsync(authSessionFile, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
     const session = JSON.parse(rawSession) as AuthSession;
 
     return session.access_token ? session : null;
@@ -164,11 +161,7 @@ export async function getAuthSession() {
 
 export async function clearAuthSession() {
   try {
-    const info = await FileSystem.getInfoAsync(authSessionFile);
-
-    if (info.exists) {
-      await FileSystem.deleteAsync(authSessionFile, { idempotent: true });
-    }
+    await deletePersistentValue(authSessionKey);
   } catch {
     // Nothing to clear.
   }

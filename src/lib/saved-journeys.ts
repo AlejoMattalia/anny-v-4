@@ -1,5 +1,5 @@
-import * as FileSystem from 'expo-file-system/legacy';
 import { LocationItem } from './saved-locations';
+import { readPersistentValue, writePersistentValue } from './persistent-storage';
 
 export interface SavedJourney {
   id: string;
@@ -10,18 +10,15 @@ export interface SavedJourney {
   createdAt: string;
 }
 
-const journeysFile = `${FileSystem.documentDirectory}anny-saved-journeys.json`;
+const journeysKey = 'anny-saved-journeys.json';
 
 export async function getSavedJourneys(): Promise<SavedJourney[]> {
   try {
-    const info = await FileSystem.getInfoAsync(journeysFile);
-    if (!info.exists) {
+    const rawData = await readPersistentValue(journeysKey);
+    if (rawData === null) {
       return [];
     }
 
-    const rawData = await FileSystem.readAsStringAsync(journeysFile, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
     const parsed = JSON.parse(rawData);
     return Array.isArray(parsed) ? (parsed as SavedJourney[]) : [];
   } catch (error) {
@@ -32,9 +29,7 @@ export async function getSavedJourneys(): Promise<SavedJourney[]> {
 
 export async function saveSavedJourneys(journeys: SavedJourney[]): Promise<void> {
   try {
-    await FileSystem.writeAsStringAsync(journeysFile, JSON.stringify(journeys), {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    await writePersistentValue(journeysKey, JSON.stringify(journeys));
   } catch (error) {
     console.error('Error al guardar viajes:', error);
   }

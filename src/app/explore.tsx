@@ -1,13 +1,44 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
+import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
 const actions = [
-  { icon: 'camera-outline', label: 'Cámara' },
-  { icon: 'text-recognition', label: 'Leer texto' },
-  { icon: 'cash-multiple', label: 'Billetes' },
-] as const;
+  {
+    icon: 'crosshairs-gps',
+    label: 'Dónde estoy',
+    description: 'Escuchar y ver tu dirección actual',
+    route: '/where-am-i',
+    accent: '#208AEF',
+    background: 'rgba(32, 138, 239, 0.14)',
+  },
+  {
+    icon: 'map-search-outline',
+    label: 'Explorador de mapa',
+    description: 'Buscar lugares y recorrer el mapa',
+    route: '/map-explorer',
+    accent: '#8D5BFF',
+    background: 'rgba(141, 91, 255, 0.14)',
+  },
+  {
+    icon: 'map-marker-radius-outline',
+    label: 'Lugares cercanos',
+    description: 'Encontrar comercios y servicios próximos',
+    route: '/nearby-places',
+    accent: '#4DAA57',
+    background: 'rgba(77, 170, 87, 0.14)',
+  },
+] satisfies readonly {
+  icon: MaterialIconName;
+  label: string;
+  description: string;
+  route: string;
+  accent: string;
+  background: string;
+}[];
 
 export default function ExploreScreen() {
   return (
@@ -26,13 +57,25 @@ export default function ExploreScreen() {
 
         <View style={styles.actions}>
           {actions.map((action) => (
-            <View key={action.label} style={styles.actionRow}>
-              <View style={styles.rowIcon}>
-                <MaterialCommunityIcons color="#B18CFF" name={action.icon} size={22} />
+            <Pressable
+              accessibilityHint={action.description}
+              accessibilityLabel={action.label}
+              accessibilityRole="button"
+              key={action.label}
+              onPress={() => router.push(action.route as Href)}
+              style={({ pressed }) => [
+                styles.actionRow,
+                pressed ? styles.actionRowPressed : null,
+              ]}>
+              <View style={[styles.rowIcon, { backgroundColor: action.background }]}>
+                <MaterialCommunityIcons color={action.accent} name={action.icon} size={23} />
               </View>
-              <Text style={styles.rowTitle}>{action.label}</Text>
-              <Text style={styles.soonText}>Próximamente</Text>
-            </View>
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitle}>{action.label}</Text>
+                <Text style={styles.rowDescription}>{action.description}</Text>
+              </View>
+              <Ionicons color={action.accent} name="chevron-forward" size={21} />
+            </Pressable>
           ))}
         </View>
       </SafeAreaView>
@@ -94,7 +137,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionRow: {
-    minHeight: 58,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -103,6 +146,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#0C1118',
     paddingHorizontal: 11,
+  },
+  actionRowPressed: {
+    opacity: 0.72,
   },
   rowIcon: {
     width: 38,
@@ -113,15 +159,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(141, 91, 255, 0.14)',
   },
   rowTitle: {
-    flex: 1,
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',
   },
-  soonText: {
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  rowDescription: {
     color: '#7F8A9B',
-    fontSize: 10,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontSize: 12,
+    lineHeight: 17,
   },
 });

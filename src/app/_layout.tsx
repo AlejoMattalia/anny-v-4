@@ -3,6 +3,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { BluetoothGlassesManager } from '@/components/bluetooth-glasses-manager';
+import { ScreenVoiceAnnouncer } from '@/components/screen-voice-announcer';
 import { requestVoicePermissions, speak } from '@/lib/voice';
 
 SplashScreen.preventAutoHideAsync();
@@ -25,6 +27,8 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={DarkTheme}>
       <AnimatedSplashOverlay />
+      <BluetoothGlassesManager />
+      <ScreenVoiceAnnouncer />
       <Stack
         screenOptions={{
           headerShown: false,

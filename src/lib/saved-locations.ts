@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import { readPersistentValue, writePersistentValue } from './persistent-storage';
 
 export interface LocationItem {
   id: string;
@@ -8,7 +8,7 @@ export interface LocationItem {
   longitude: number;
 }
 
-const locationsFile = `${FileSystem.documentDirectory}anny-saved-locations.json`;
+const locationsKey = 'anny-saved-locations.json';
 
 const defaultLocations: LocationItem[] = [
   {
@@ -43,16 +43,13 @@ const defaultLocations: LocationItem[] = [
 
 export async function getSavedLocations(): Promise<LocationItem[]> {
   try {
-    const info = await FileSystem.getInfoAsync(locationsFile);
-    if (!info.exists) {
+    const rawData = await readPersistentValue(locationsKey);
+    if (rawData === null) {
       // Save default locations on first load
       await saveSavedLocations(defaultLocations);
       return defaultLocations;
     }
 
-    const rawData = await FileSystem.readAsStringAsync(locationsFile, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
     const parsed = JSON.parse(rawData);
     return Array.isArray(parsed) ? (parsed as LocationItem[]) : defaultLocations;
   } catch (error) {
@@ -63,9 +60,7 @@ export async function getSavedLocations(): Promise<LocationItem[]> {
 
 export async function saveSavedLocations(locations: LocationItem[]): Promise<void> {
   try {
-    await FileSystem.writeAsStringAsync(locationsFile, JSON.stringify(locations), {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    await writePersistentValue(locationsKey, JSON.stringify(locations));
   } catch (error) {
     console.error('Error al guardar ubicaciones:', error);
   }

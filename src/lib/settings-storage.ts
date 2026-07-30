@@ -1,26 +1,29 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import { readPersistentValue, writePersistentValue } from './persistent-storage';
 
-const settingsFile = `${FileSystem.documentDirectory}anny-settings.json`;
+const settingsKey = 'anny-settings.json';
 
 export interface AppSettings {
   compassActive: boolean;
+  destinationAlertsEnabled: boolean;
   glassesProtocol: 'wifi' | 'bluetooth';
+  notificationDistance: number;
   voiceRate: number;
   simulationSpeed: number;
 }
 
 const defaultSettings: AppSettings = {
   compassActive: false,
+  destinationAlertsEnabled: true,
   glassesProtocol: 'bluetooth',
+  notificationDistance: 400,
   voiceRate: 1,
   simulationSpeed: 1,
 };
 
 export async function loadSettings(): Promise<AppSettings> {
   try {
-    const info = await FileSystem.getInfoAsync(settingsFile);
-    if (info.exists) {
-      const content = await FileSystem.readAsStringAsync(settingsFile);
+    const content = await readPersistentValue(settingsKey);
+    if (content !== null) {
       return { ...defaultSettings, ...JSON.parse(content) };
     }
   } catch {
@@ -33,9 +36,7 @@ export async function saveSettings(settings: Partial<AppSettings>) {
   try {
     const current = await loadSettings();
     const updated = { ...current, ...settings };
-    await FileSystem.writeAsStringAsync(settingsFile, JSON.stringify(updated), {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    await writePersistentValue(settingsKey, JSON.stringify(updated));
   } catch {
     // Ignore error
   }

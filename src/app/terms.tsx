@@ -19,7 +19,6 @@ export default function TermsScreen() {
     try {
       const nextTerms = await getTermsOfUse();
       setTerms(nextTerms || 'No hay términos de uso disponibles.');
-      await speak('Términos de uso.');
     } catch {
       setError('No pudimos cargar los términos de uso.');
       await speak('No pudimos cargar los términos de uso.');

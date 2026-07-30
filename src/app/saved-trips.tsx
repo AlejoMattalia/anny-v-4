@@ -1,16 +1,41 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { deleteSavedJourney, getSavedJourneys, SavedJourney } from '@/lib/saved-journeys';
 import { speak } from '@/lib/voice';
 
+type TravelMode = 'transit' | 'driving' | 'walking';
+
+const TRAVEL_MODES: {
+  value: TravelMode;
+  label: string;
+  icon: 'bus' | 'car' | 'walk';
+}[] = [
+  { value: 'transit', label: 'Transporte', icon: 'bus' },
+  { value: 'driving', label: 'Auto', icon: 'car' },
+  { value: 'walking', label: 'A pie', icon: 'walk' },
+];
+
+function getSavedTravelMode(journey: SavedJourney): TravelMode {
+  return journey.travelMode === 'transit' ||
+    journey.travelMode === 'driving' ||
+    journey.travelMode === 'walking'
+    ? journey.travelMode
+    : 'walking';
+}
+
+function getTravelModeLabel(mode: TravelMode) {
+  return TRAVEL_MODES.find((item) => item.value === mode)?.label ?? 'A pie';
+}
+
 export default function SavedTripsScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
   const [journeys, setJourneys] = useState<SavedJourney[]>([]);
   const [selectedJourney, setSelectedJourney] = useState<SavedJourney | null>(null);
+  const [selectedTravelMode, setSelectedTravelMode] = useState<TravelMode>('walking');
   const isSimulationMode = params.mode === 'simulate';
 
   const loadJourneys = useCallback(async () => {
@@ -23,10 +48,6 @@ export default function SavedTripsScreen() {
       void loadJourneys();
     }, [loadJourneys])
   );
-
-  useEffect(() => {
-    void speak('Pantalla de viajes guardados y favoritos.');
-  }, []);
 
   const handleDelete = async (id: string, title: string) => {
     try {
@@ -44,8 +65,9 @@ export default function SavedTripsScreen() {
 
   const handleSelectJourney = (journey: SavedJourney) => {
     setSelectedJourney(journey);
+    setSelectedTravelMode(getSavedTravelMode(journey));
     void speak(
-      `Seleccionaste ${journey.title}. Origen: ${journey.origin.name}. Destino: ${journey.destination.name}. ¿Deseas ${isSimulationMode ? 'simular' : 'iniciar'} este viaje?`,
+      `Seleccionaste ${journey.title}. Origen: ${journey.origin.name}. Destino: ${journey.destination.name}. Modo de viaje: ${getTravelModeLabel(getSavedTravelMode(journey))}. Podés cambiarlo antes de ${isSimulationMode ? 'simular' : 'iniciar'} el viaje.`,
     );
   };
 
@@ -62,7 +84,7 @@ export default function SavedTripsScreen() {
         destAddress: selectedJourney.destination.address,
         destLat: selectedJourney.destination.latitude.toString(),
         destLng: selectedJourney.destination.longitude.toString(),
-        travelMode: selectedJourney.travelMode ?? 'walking',
+        travelMode: selectedTravelMode,
         mode: isSimulationMode ? 'simulate' : 'start',
         autoStartSimulation: isSimulationMode ? '1' : '0',
       },
@@ -123,6 +145,22 @@ export default function SavedTripsScreen() {
                       Destino: {item.destination.name}
                     </Text>
                   </View>
+                  <View style={styles.cardStep}>
+                    <Ionicons
+                      color="#4DAA57"
+                      name={
+                        getSavedTravelMode(item) === 'transit'
+                          ? 'bus'
+                          : getSavedTravelMode(item) === 'driving'
+                            ? 'car'
+                            : 'walk'
+                      }
+                      size={12}
+                    />
+                    <Text numberOfLines={1} style={styles.cardStepText}>
+                      {getTravelModeLabel(getSavedTravelMode(item))}
+                    </Text>
+                  </View>
                 </View>
               </Pressable>
               <Pressable
@@ -180,6 +218,43 @@ export default function SavedTripsScreen() {
                   <Text style={styles.modalDetailValue}>{selectedJourney.destination.name}</Text>
                   <Text style={styles.modalDetailAddress}>{selectedJourney.destination.address}</Text>
                 </View>
+              </View>
+
+              <Text style={styles.travelModeLabel}>Cómo querés viajar</Text>
+              <View accessibilityRole="radiogroup" style={styles.travelModeRow}>
+                {TRAVEL_MODES.map((mode) => {
+                  const isSelected = selectedTravelMode === mode.value;
+                  return (
+                    <Pressable
+                      accessibilityLabel={`Viajar en ${mode.label}`}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      key={mode.value}
+                      onPress={() => {
+                        setSelectedTravelMode(mode.value);
+                        void speak(`Modo de viaje: ${mode.label}.`);
+                      }}
+                      style={[
+                        styles.travelModeButton,
+                        isSelected && styles.travelModeButtonSelected,
+                      ]}
+                    >
+                      <Ionicons
+                        color={isSelected ? '#FFFFFF' : '#7F8A9B'}
+                        name={mode.icon}
+                        size={18}
+                      />
+                      <Text
+                        style={[
+                          styles.travelModeButtonText,
+                          isSelected && styles.travelModeButtonTextSelected,
+                        ]}
+                      >
+                        {mode.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
 
               <View style={styles.modalButtons}>
@@ -417,6 +492,41 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 2,
+  },
+  travelModeLabel: {
+    color: '#AEB7C7',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  travelModeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  travelModeButton: {
+    flex: 1,
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: '#1D2633',
+    borderRadius: 10,
+    backgroundColor: '#101721',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: 4,
+  },
+  travelModeButtonSelected: {
+    borderColor: '#6A29FF',
+    backgroundColor: '#6A29FF',
+  },
+  travelModeButtonText: {
+    color: '#7F8A9B',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  travelModeButtonTextSelected: {
+    color: '#FFFFFF',
   },
   modalButtons: {
     flexDirection: 'row',

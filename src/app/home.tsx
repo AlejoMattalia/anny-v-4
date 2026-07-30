@@ -1,19 +1,22 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { router, type Href, useFocusEffect } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Animated, Dimensions, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { clearAuthSession } from '@/lib/auth';
-import { speak } from '@/lib/voice';
+import {
+  getConnectedAnnyGlasses,
+  subscribeToBluetoothChanges,
+} from '@/lib/bluetooth-glasses';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const drawerItems = [
   { icon: 'home-outline', label: 'Home' },
   { icon: 'account-outline', label: 'Perfil', route: '/profile' },
-  { icon: 'access-point', label: 'Dispositivos' },
+  { icon: 'access-point', label: 'Dispositivos', route: '/bluetooth-devices' },
   { icon: 'cog-outline', label: 'Configuraciones', route: '/settings' },
   { icon: 'book-open-page-variant-outline', label: 'Tutorial', route: '/onboarding' },
   { icon: 'file-document-outline', label: 'Términos de uso', route: '/terms' },
@@ -32,7 +35,7 @@ const homeSections = [
     background: 'rgba(141, 91, 255, 0.13)',
     icon: 'eye',
     title: 'EXPLORAR',
-    soon: true,
+    route: '/explore',
   },
   {
     accent: '#4DAA57',
@@ -65,6 +68,7 @@ function SectionIcon({ name }: { name: string }) {
 
 export default function HomeScreen() {
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [connectedGlassesName, setConnectedGlassesName] = useState('');
   const [drawerProgress] = useState(() => new Animated.Value(0));
   const drawerTranslateX = drawerProgress.interpolate({
     inputRange: [0, 1],
@@ -75,11 +79,36 @@ export default function HomeScreen() {
     outputRange: [0, 1],
   });
 
-  useEffect(() => {
-    void speak(
-      'Inicio de Anny. Primero está Viajar, para planificar o iniciar un viaje. Configuración permite ajustar conexiones y preferencias. Explorar, Ayuda y hablar con Anny estarán disponibles próximamente.',
-    );
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      async function refreshGlassesConnection() {
+        const device = await getConnectedAnnyGlasses();
+        if (active) {
+          setConnectedGlassesName(device?.name ?? '');
+        }
+      }
+
+      void refreshGlassesConnection();
+      const startupRefreshTimers = [1_000, 3_000].map((delay) =>
+        setTimeout(() => {
+          void refreshGlassesConnection();
+        }, delay),
+      );
+      const removeBluetoothListeners = subscribeToBluetoothChanges(() => {
+        // ACL_CONNECTED can arrive slightly before the serial RFCOMM socket is
+        // ready. The service also emits once the socket is confirmed.
+        void refreshGlassesConnection();
+      });
+
+      return () => {
+        active = false;
+        startupRefreshTimers.forEach(clearTimeout);
+        removeBluetoothListeners();
+      };
+    }, []),
+  );
 
   const openDrawer = useCallback(() => {
     setDrawerVisible(true);
@@ -179,7 +208,16 @@ export default function HomeScreen() {
           style={styles.mainScroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}>
-          <View style={styles.connectionPanel}>
+          <Pressable
+            accessibilityHint="Abre la administración de dispositivos Bluetooth"
+            accessibilityLabel={`Anteojos. ${
+              connectedGlassesName
+                ? `Conectados como ${connectedGlassesName}`
+                : 'Sin conexión'
+            }`}
+            accessibilityRole="button"
+            onPress={() => router.push('/bluetooth-devices')}
+            style={styles.connectionPanel}>
             <View style={styles.connectionHeader}>
               <View style={styles.connectionIconWrap}>
                 <MaterialCommunityIcons color="#B18CFF" name="glasses" size={21} />
@@ -187,38 +225,42 @@ export default function HomeScreen() {
               <View style={styles.connectionText}>
                 <Text style={styles.connectionTitle}>Anteojos</Text>
                 <View style={styles.connectionStatusRow}>
-                  <View style={styles.statusDot} />
-                  <Text style={styles.connectionStatusText}>Conectado</Text>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      connectedGlassesName ? null : styles.statusDotDisconnected,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.connectionStatusText,
+                      connectedGlassesName
+                        ? null
+                        : styles.connectionStatusTextDisconnected,
+                    ]}>
+                    {connectedGlassesName ? 'Conectado' : 'Sin conexión'}
+                  </Text>
                 </View>
               </View>
+              <Ionicons color="#7F8A9B" name="chevron-forward" size={21} />
             </View>
 
             <View style={styles.connectionBody}>
               <View style={styles.networkSelector}>
-                <View style={styles.networkOption}>
-                  <MaterialCommunityIcons color="#7F8A9B" name="wifi" size={16} />
-                  <Text style={styles.networkText}>WiFi</Text>
-                </View>
                 <View style={[styles.networkOption, styles.networkOptionActive]}>
-                  <MaterialCommunityIcons color="#FFFFFF" name="antenna" size={16} />
-                  <Text style={[styles.networkText, styles.networkTextActive]}>Hotspot</Text>
+                  <MaterialCommunityIcons color="#FFFFFF" name="bluetooth" size={16} />
+                  <Text style={[styles.networkText, styles.networkTextActive]}>Bluetooth</Text>
                 </View>
               </View>
 
-              <View style={styles.batteryBox}>
-                <View style={styles.batteryTopRow}>
-                  <View style={styles.batteryLabelRow}>
-                    <MaterialCommunityIcons color="#4DAA57" name="battery-80" size={17} />
-                    <Text style={styles.batteryLabel}>Batería</Text>
-                  </View>
-                  <Text style={styles.batteryValue}>85%</Text>
-                </View>
-                <View style={styles.batteryTrack}>
-                  <View style={styles.batteryFill} />
-                </View>
+              <View style={styles.connectionDeviceBox}>
+                <Text style={styles.connectionDeviceLabel}>Dispositivo</Text>
+                <Text numberOfLines={1} style={styles.connectionDeviceName}>
+                  {connectedGlassesName || 'No seleccionado'}
+                </Text>
               </View>
             </View>
-          </View>
+          </Pressable>
 
           <View style={styles.sections}>
             {homeSections.map((section) => (
@@ -411,6 +453,9 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#4DAA57',
   },
+  statusDotDisconnected: {
+    backgroundColor: '#7F8A9B',
+  },
   content: {
     flexGrow: 1,
     paddingBottom: 8,
@@ -463,6 +508,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
   },
+  connectionStatusTextDisconnected: {
+    color: '#AEB7C7',
+  },
   connectionBody: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -497,6 +545,27 @@ const styles = StyleSheet.create({
   },
   networkTextActive: {
     color: '#FFFFFF',
+  },
+  connectionDeviceBox: {
+    flex: 1.4,
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1D2633',
+    backgroundColor: '#080C12',
+    paddingHorizontal: 10,
+  },
+  connectionDeviceLabel: {
+    color: '#7F8A9B',
+    fontSize: 9,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  connectionDeviceName: {
+    color: '#D9DEEA',
+    fontSize: 11,
+    fontWeight: '900',
+    marginTop: 3,
   },
   batteryBox: {
     width: 106,

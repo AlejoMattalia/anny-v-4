@@ -30,10 +30,10 @@ type ProfileMenuItem = {
 
 const accountItems: ProfileMenuItem[] = [
   { icon: 'account-outline', label: 'Información personal', action: 'edit' },
-  { icon: 'bluetooth', label: 'Dispositivos Bluetooth', soon: true },
+  { icon: 'bluetooth', label: 'Dispositivos Bluetooth', route: '/bluetooth-devices' as Href },
   { icon: 'microphone-message', label: 'Comandos', soon: true },
   { icon: 'wallet-outline', label: 'Mi billetera', soon: true },
-  { icon: 'bell-outline', label: 'Notificaciones', soon: true },
+  { icon: 'bell-outline', label: 'Notificaciones', route: '/notifications' as Href },
 ] satisfies ProfileMenuItem[];
 
 const legalItems: ProfileMenuItem[] = [
@@ -78,7 +78,6 @@ export default function ProfileScreen() {
       setName(getUserName(profileUser));
       setPhone(getStringValue(profileUser, 'phone'));
       setIsLoading(false);
-      await speak(`Perfil de ${getUserName(profileUser)}. Podés revisar tu cuenta, editar información personal o cerrar sesión.`);
     }
 
     void loadProfile();

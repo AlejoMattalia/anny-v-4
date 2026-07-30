@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,15 @@ import { getSavedLocations, LocationItem, saveSavedLocations } from '@/lib/saved
 import { speak } from '@/lib/voice';
 
 export default function SavedLocationsScreen() {
+  const params = useLocalSearchParams();
+  const isSelectingForTrip = params.selectForTrip === '1';
+  const tripMode = params.mode === 'simulate' ? 'simulate' : 'start';
+  const travelMode =
+    params.travelMode === 'transit' ||
+    params.travelMode === 'driving' ||
+    params.travelMode === 'walking'
+      ? params.travelMode
+      : 'walking';
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -23,7 +32,6 @@ export default function SavedLocationsScreen() {
       setLocations(data);
     }
     void load();
-    void speak('Sección de mis ubicaciones guardadas.');
   }, []);
 
   // Debounced search logic
@@ -70,6 +78,23 @@ export default function SavedLocationsScreen() {
     void speak(`Dirección seleccionada: ${item.address}.`);
   };
 
+  const handleSelectDestination = (item: LocationItem) => {
+    if (!isSelectingForTrip) return;
+
+    void speak(`${item.name} seleccionada como destino.`);
+    router.replace({
+      pathname: '/start-trip',
+      params: {
+        mode: tripMode,
+        travelMode,
+        destName: item.name,
+        destAddress: item.address,
+        destLat: String(item.latitude),
+        destLng: String(item.longitude),
+      },
+    });
+  };
+
   const handleSaveLocation = async () => {
     if (newName.trim() === '') {
       void speak('Por favor escribe un nombre para esta ubicación.');
@@ -108,14 +133,23 @@ export default function SavedLocationsScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable
-            accessibilityLabel="Volver a sección de viajes"
-            onPress={() => router.replace('/travel')}
+            accessibilityLabel={isSelectingForTrip ? 'Volver al viaje' : 'Volver a sección de viajes'}
+            onPress={() => {
+              if (isSelectingForTrip) {
+                router.back();
+              } else {
+                router.replace('/travel');
+              }
+            }}
             style={styles.backButton}
           >
             <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Mis ubicaciones</Text>
+            {isSelectingForTrip && (
+              <Text style={styles.subtitle}>Elegí una como destino</Text>
+            )}
           </View>
           <Pressable
             accessibilityLabel="Agregar nueva ubicación"
@@ -133,15 +167,29 @@ export default function SavedLocationsScreen() {
             contentContainerStyle={styles.listContainer}
             renderItem={({ item }) => (
               <View style={styles.card}>
-                <View style={styles.cardIconBg}>
-                  <Ionicons color="#E9528A" name="star" size={20} />
-                </View>
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle}>{item.name}</Text>
-                  <Text numberOfLines={2} style={styles.cardAddress}>
-                    {item.address}
-                  </Text>
-                </View>
+                <Pressable
+                  accessibilityHint={
+                    isSelectingForTrip ? 'Calcula el viaje hacia esta ubicación' : undefined
+                  }
+                  accessibilityLabel={`${item.name}. ${item.address}`}
+                  accessibilityRole={isSelectingForTrip ? 'button' : undefined}
+                  disabled={!isSelectingForTrip}
+                  onPress={() => handleSelectDestination(item)}
+                  style={styles.cardSelectionArea}
+                >
+                  <View style={styles.cardIconBg}>
+                    <Ionicons color="#E9528A" name="star" size={20} />
+                  </View>
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardTitle}>{item.name}</Text>
+                    <Text numberOfLines={2} style={styles.cardAddress}>
+                      {item.address}
+                    </Text>
+                  </View>
+                  {isSelectingForTrip && (
+                    <Ionicons color="#E9528A" name="chevron-forward" size={20} />
+                  )}
+                </Pressable>
                 {/* Prevent deleting default locations 1-4 for convenience, but allow deleting others or all */}
                 <Pressable
                   accessibilityLabel={`Eliminar ubicación ${item.name}`}
@@ -322,7 +370,15 @@ const styles = StyleSheet.create({
     borderColor: '#1D2633',
     borderRadius: 8,
     backgroundColor: '#0C1118',
-    padding: 12,
+    padding: 8,
+    gap: 4,
+  },
+  cardSelectionArea: {
+    flex: 1,
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 4,
     gap: 12,
   },
   cardIconBg: {

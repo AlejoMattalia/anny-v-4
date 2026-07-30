@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -17,12 +17,6 @@ import { speak } from '@/lib/voice';
 
 export default function TrainingScreen() {
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
-
-  useEffect(() => {
-    void speak(
-      'Capacitaciones. Nivel básico. Elegí un módulo para escuchar sus actividades y pasos. Esta sección replica las capacitaciones de Anny.',
-    );
-  }, []);
 
   function selectModule(module: TrainingModule) {
     setSelectedModuleId((currentModuleId) => {

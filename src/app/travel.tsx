@@ -1,11 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { speak } from '@/lib/voice';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -56,10 +53,6 @@ const travelOptions: TravelOption[] = [
 ];
 
 export default function TravelScreen() {
-  useEffect(() => {
-    void speak('Sección de Viajes. Podés seleccionar: planificar viaje, iniciar viaje ahora, simular viaje, ver tus viajes guardados, o ir a mis ubicaciones.');
-  }, []);
-
   const handlePressOption = async (option: TravelOption) => {
     switch (option.id) {
       case 'plan':

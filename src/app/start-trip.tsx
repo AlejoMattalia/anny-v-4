@@ -4,10 +4,14 @@ import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   FlatList,
+  findNodeHandle,
   Image,
   Linking,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { searchLocations } from '@/lib/location-search';
+import { sendDestinationAlert } from '@/lib/notification-service';
 import { loadSettings } from '@/lib/settings-storage';
 import { listenOnce, speak, stopListening } from '@/lib/voice';
 
@@ -73,6 +78,22 @@ interface RouteResult extends CalculatedRoute {
 type SimulationPhase = 'idle' | 'intro' | 'running';
 type NavigationPanel = 'instruction' | 'next' | 'progress' | 'awareness';
 type TravelMode = 'transit' | 'driving' | 'walking';
+
+const TRAVEL_MODES: {
+  value: TravelMode;
+  label: string;
+  icon: 'bus' | 'car' | 'walk';
+}[] = [
+  { value: 'transit', label: 'Transporte', icon: 'bus' },
+  { value: 'driving', label: 'Auto', icon: 'car' },
+  { value: 'walking', label: 'A pie', icon: 'walk' },
+];
+
+function getTravelModeParam(value: string | string[] | undefined): TravelMode {
+  return value === 'transit' || value === 'driving' || value === 'walking'
+    ? value
+    : 'walking';
+}
 
 const GOOGLE_MAP_KEY =
   process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY?.trim() ||
@@ -449,7 +470,7 @@ const fetchRoute = async (
       };
     }
 
-    if (travelMode === 'driving') {
+    if (travelMode === 'driving' && Platform.OS !== 'web') {
       const googleMapsApiKey = GOOGLE_MAP_KEY;
       if (!googleMapsApiKey) {
         throw new Error('Falta configurar la clave de Google Maps para el viaje en auto.');
@@ -493,7 +514,7 @@ const fetchRoute = async (
       };
     }
 
-    const costing = 'pedestrian';
+    const costing = travelMode === 'driving' ? 'auto' : 'pedestrian';
     const routeRequest = {
       locations: [
         { lat: origin.latitude, lon: origin.longitude },
@@ -518,9 +539,12 @@ const fetchRoute = async (
       .map((maneuver: any) => {
         const point = shape[maneuver.begin_shape_index] ?? origin;
         const instruction = maneuver.instruction || 'Continuá por la ruta indicada.';
-        const type: RouteStep['type'] = instruction.toLowerCase().includes('cruce')
-          ? 'crossing'
-          : 'walking';
+        const type: RouteStep['type'] =
+          travelMode === 'driving'
+            ? 'driving'
+            : instruction.toLowerCase().includes('cruce')
+              ? 'crossing'
+              : 'walking';
 
         return {
           instruction,
@@ -553,6 +577,11 @@ const fetchRoute = async (
   } catch (error) {
     console.warn('Error al calcular la ruta real:', error);
     if (travelMode === 'transit') {
+      if (Platform.OS === 'web' && error instanceof TypeError) {
+        throw new Error(
+          'El navegador no permite consultar directamente el transporte público. Podés abrir el recorrido en Google Maps.',
+        );
+      }
       throw error instanceof Error
         ? error
         : new Error('No se pudieron cargar las opciones de transporte público.');
@@ -560,7 +589,7 @@ const fetchRoute = async (
     if (travelMode === 'driving') {
       throw error instanceof Error
         ? error
-        : new Error('No se pudo calcular la ruta en auto con Google Maps.');
+        : new Error('No se pudo calcular la ruta en auto.');
     }
     throw new Error('No se pudo calcular la ruta real entre las direcciones seleccionadas.');
   }
@@ -570,8 +599,9 @@ export default function StartTripScreen() {
   const params = useLocalSearchParams();
   const isSimulationEntry = params.mode === 'simulate';
   const screenTitle = isSimulationEntry ? 'Simular viaje' : 'Iniciar viaje';
-  const travelMode: TravelMode =
-    params.travelMode === 'transit' || params.travelMode === 'driving' ? params.travelMode : 'walking';
+  const [travelMode, setTravelMode] = useState<TravelMode>(() =>
+    getTravelModeParam(params.travelMode),
+  );
   const travelModeLabel =
     travelMode === 'transit' ? 'transporte público' : travelMode === 'driving' ? 'auto' : 'a pie';
 
@@ -601,9 +631,12 @@ export default function StartTripScreen() {
   const [isSearchingResults, setIsSearchingResults] = useState(false);
   const voiceSearchSession = useRef(0);
   const lastApproachAnnouncement = useRef('');
+  const hasSentDestinationAlert = useRef(false);
   const consecutiveOffRouteReadings = useRef(0);
   const reroutingInProgress = useRef(false);
   const lastRerouteStartedAt = useRef(0);
+  const quickMenuTriggerRef = useRef<View>(null);
+  const quickMenuFirstOptionRef = useRef<View>(null);
 
   // Navigation states
   const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
@@ -629,7 +662,70 @@ export default function StartTripScreen() {
   const [routeMapSize, setRouteMapSize] = useState({ width: 1, height: 1 });
   const [hasAutoStartedSimulation, setHasAutoStartedSimulation] = useState(false);
   const [simulationSpeed, setSimulationSpeed] = useState(1);
+  const [destinationAlertsEnabled, setDestinationAlertsEnabled] = useState(true);
+  const [notificationDistance, setNotificationDistance] = useState(400);
   const [lastAnnouncedSceneKey, setLastAnnouncedSceneKey] = useState('');
+
+  const handleSelectTravelMode = (mode: TravelMode, label: string) => {
+    if (mode === travelMode) return;
+    setTravelMode(mode);
+    void speak(`Modo de viaje: ${label}.`);
+  };
+
+  const focusAccessibilityElement = (element: View | null) => {
+    const reactTag = element ? findNodeHandle(element) : null;
+    if (reactTag) {
+      AccessibilityInfo.setAccessibilityFocus(reactTag);
+    }
+  };
+
+  const closeQuickMenu = () => {
+    setShowQuickMenu(false);
+    setTimeout(() => focusAccessibilityElement(quickMenuTriggerRef.current), 150);
+  };
+
+  const runQuickMenuAction = (action: () => void) => {
+    setShowQuickMenu(false);
+    setTimeout(action, 150);
+  };
+
+  const renderTravelModeSelector = () => (
+    <View style={styles.travelModeSelector}>
+      <Text style={styles.travelModeLabel}>Cómo querés viajar</Text>
+      <View accessibilityRole="radiogroup" style={styles.travelModeRow}>
+        {TRAVEL_MODES.map((mode) => {
+          const isSelected = travelMode === mode.value;
+          return (
+            <Pressable
+              accessibilityLabel={`Viajar en ${mode.label}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: isSelected }}
+              key={mode.value}
+              onPress={() => handleSelectTravelMode(mode.value, mode.label)}
+              style={[
+                styles.travelModeButton,
+                isSelected && styles.travelModeButtonSelected,
+              ]}
+            >
+              <Ionicons
+                color={isSelected ? '#FFFFFF' : '#7F8A9B'}
+                name={mode.icon}
+                size={19}
+              />
+              <Text
+                style={[
+                  styles.travelModeButtonText,
+                  isSelected && styles.travelModeButtonTextSelected,
+                ]}
+              >
+                {mode.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
 
   // Request GPS position on mount
   useEffect(() => {
@@ -656,8 +752,12 @@ export default function StartTripScreen() {
       try {
         const savedSettings = await loadSettings();
         setSimulationSpeed(savedSettings.simulationSpeed);
+        setDestinationAlertsEnabled(savedSettings.destinationAlertsEnabled);
+        setNotificationDistance(savedSettings.notificationDistance);
       } catch {
         setSimulationSpeed(1);
+        setDestinationAlertsEnabled(true);
+        setNotificationDistance(400);
       }
     }
 
@@ -820,19 +920,6 @@ export default function StartTripScreen() {
     handleStartNav();
   }, [hasAutoStartedSimulation, loadingRoute, params.autoStartSimulation, routeSteps.length, state]);
 
-  // Initial speech announcement
-  useEffect(() => {
-    if (initialPlannedDest) {
-      // route will load automatically via coordinates
-    } else {
-      void speak(
-        isSimulationEntry
-          ? 'Sección Simular Viaje. Podés escribir un destino, usar el micrófono o abrir tus viajes guardados.'
-          : 'Sección Iniciar Viaje. Escribe tu destino en el buscador o presiona el micrófono para hablar.'
-      );
-    }
-  }, [initialPlannedDest, isSimulationEntry]);
-
   // Debounced query logic for keyboard search
   useEffect(() => {
     if (searchQuery.trim().length < 3) {
@@ -958,6 +1045,7 @@ export default function StartTripScreen() {
 
   const handleStartNav = () => {
     if (routeSteps.length === 0) return;
+    hasSentDestinationAlert.current = false;
     setState('navigating');
     setCurrentStepIndex(0);
     setSimulationPhase(isSimulationEntry ? 'intro' : 'running');
@@ -1131,6 +1219,25 @@ export default function StartTripScreen() {
 
         const arrivalThreshold = clamp(position.coords.accuracy ?? 20, 15, 35);
         if (distance > arrivalThreshold) {
+          const isDestinationStep =
+            targetStep.type === 'arrival' || targetIndex === routeSteps.length - 1;
+
+          if (
+            destinationAlertsEnabled &&
+            isDestinationStep &&
+            distance <= notificationDistance &&
+            !hasSentDestinationAlert.current
+          ) {
+            hasSentDestinationAlert.current = true;
+            const roundedDistance = Math.max(20, Math.round(distance / 10) * 10);
+            const destinationName =
+              targetStep.transit?.arrivalStop || selectedDest?.name || '';
+            void speak(
+              `Atención. ${destinationName ? `${destinationName} está` : 'Tu destino está'} a aproximadamente ${roundedDistance} metros. Preparáte para llegar.`,
+            );
+            void sendDestinationAlert(destinationName, roundedDistance);
+          }
+
           const announcementDistance =
             distance <= 20 ? 20 : distance <= 50 ? 50 : distance <= 100 ? 100 : null;
           const announcementKey = `${targetIndex}-${announcementDistance}`;
@@ -1172,7 +1279,9 @@ export default function StartTripScreen() {
     };
   }, [
     currentStepIndex,
+    destinationAlertsEnabled,
     isSimulationEntry,
+    notificationDistance,
     routeShape,
     routeSteps,
     selectedDest,
@@ -1441,6 +1550,8 @@ export default function StartTripScreen() {
 
             <Text style={styles.mainPrompt}>¿A dónde quieres ir?</Text>
 
+            {renderTravelModeSelector()}
+
             {/* Real Search Input Box */}
             <View style={styles.searchInputContainer}>
               <Ionicons color="#7F8A9B" name="search" size={20} style={styles.searchIcon} />
@@ -1477,7 +1588,16 @@ export default function StartTripScreen() {
             <View style={styles.startActions}>
               <Pressable
                 accessibilityLabel="Ir a mis lugares guardados"
-                onPress={() => router.replace('/saved-locations')}
+                onPress={() =>
+                  router.push({
+                    pathname: '/saved-locations',
+                    params: {
+                      selectForTrip: '1',
+                      mode: isSimulationEntry ? 'simulate' : 'start',
+                      travelMode,
+                    },
+                  })
+                }
                 style={styles.startActionBtn}
               >
                 <Ionicons color="#FFFFFF" name="star-outline" size={18} />
@@ -1593,6 +1713,8 @@ export default function StartTripScreen() {
                 <Text numberOfLines={2} style={styles.summaryDestAddr}>{selectedDest.address}</Text>
               </View>
             </View>
+
+            {renderTravelModeSelector()}
 
             {loadingRoute ? (
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -1730,7 +1852,9 @@ export default function StartTripScreen() {
                     <Text style={styles.googleMapsAttribution}>
                       {travelMode === 'transit'
                         ? 'Datos de transporte: Google Maps'
-                        : 'Rutas y tráfico: Google Maps'}
+                        : Platform.OS === 'web'
+                          ? 'Ruta en auto: OpenStreetMap'
+                          : 'Rutas y tráfico: Google Maps'}
                     </Text>
                   )}
                 </View>
@@ -1977,7 +2101,11 @@ export default function StartTripScreen() {
 
             <Pressable
               accessibilityLabel="Abrir menú rápido de navegación"
+              accessibilityHint="Abre una ventana con opciones de navegación en una lista vertical"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showQuickMenu }}
               onPress={() => setShowQuickMenu(true)}
+              ref={quickMenuTriggerRef}
               style={styles.quickMenuTriggerBtn}
             >
               <Ionicons color="#FFFFFF" name="menu" size={22} />
@@ -2273,71 +2401,155 @@ export default function StartTripScreen() {
         )}
 
         {/* QUICK MENU */}
-        {showQuickMenu && (
-          <View style={styles.overlayModal}>
-            <View style={[styles.overlayContent, styles.bottomDrawerContent]}>
-              <View style={styles.drawerHeader}>
-                <View style={styles.drawerHandle} />
-                <Text style={styles.drawerTitle}>Menú rápido</Text>
+        <Modal
+          animationType="fade"
+          hardwareAccelerated
+          onRequestClose={closeQuickMenu}
+          onShow={() => {
+            setTimeout(() => focusAccessibilityElement(quickMenuFirstOptionRef.current), 150);
+          }}
+          statusBarTranslucent
+          transparent
+          visible={showQuickMenu}
+        >
+          <View
+            accessibilityViewIsModal
+            aria-modal
+            importantForAccessibility="yes"
+            onAccessibilityEscape={closeQuickMenu}
+            style={styles.overlayModal}
+          >
+            <View role="dialog" style={[styles.overlayContent, styles.quickMenuModal]}>
+              <View style={styles.quickMenuHeader}>
+                <View style={styles.quickMenuHeaderText}>
+                  <Text accessibilityRole="header" style={styles.drawerTitle}>
+                    Opciones del viaje
+                  </Text>
+                  <Text style={styles.quickMenuSubtitle}>
+                    Elegí una opción de la lista
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Cerrar opciones del viaje"
+                  accessibilityRole="button"
+                  onPress={closeQuickMenu}
+                  style={styles.quickMenuHeaderClose}
+                >
+                  <Ionicons color="#FFFFFF" name="close" size={22} />
+                </Pressable>
               </View>
 
-              <View style={styles.drawerButtonsList}>
+              <View role="list" style={styles.drawerButtonsList}>
                 <Pressable
+                  accessibilityHint="Abre una ventana con tu ubicación aproximada"
+                  accessibilityLabel="Dónde estoy"
+                  accessibilityRole="button"
                   onPress={() => {
-                    setShowQuickMenu(false);
-                    handleWhereAmI();
+                    runQuickMenuAction(handleWhereAmI);
                   }}
+                  ref={quickMenuFirstOptionRef}
                   style={styles.drawerItem}
                 >
                   <Ionicons color="#FFFFFF" name="navigate" size={18} />
-                  <Text style={styles.drawerItemText}>¿Dónde estoy?</Text>
+                  <View style={styles.drawerItemContent}>
+                    <Text style={styles.drawerItemText}>¿Dónde estoy?</Text>
+                    <Text style={styles.drawerItemHint}>Consultar tu ubicación actual</Text>
+                  </View>
+                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
-                  onPress={() => speak(`Faltan aproximadamente ${Math.round(remainingDuration / 60)} minutos para completar el viaje.`)}
+                  accessibilityHint="Anuncia el tiempo estimado restante"
+                  accessibilityLabel={`Cuánto falta. Aproximadamente ${Math.max(1, Math.round(remainingDuration / 60))} minutos`}
+                  accessibilityRole="button"
+                  onPress={() =>
+                    runQuickMenuAction(() =>
+                      speak(
+                        `Faltan aproximadamente ${Math.max(1, Math.round(remainingDuration / 60))} minutos para completar el viaje.`,
+                      ),
+                    )
+                  }
                   style={styles.drawerItem}
                 >
                   <Ionicons color="#FFFFFF" name="time" size={18} />
-                  <Text style={styles.drawerItemText}>¿Cuánto falta?</Text>
+                  <View style={styles.drawerItemContent}>
+                    <Text style={styles.drawerItemText}>¿Cuánto falta?</Text>
+                    <Text style={styles.drawerItemHint}>
+                      {Math.max(1, Math.round(remainingDuration / 60))} minutos aproximadamente
+                    </Text>
+                  </View>
+                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
+                  accessibilityHint="Anuncia la próxima indicación del recorrido"
+                  accessibilityLabel={
+                    nextStep
+                      ? `Qué sigue. ${nextStep.instruction}`
+                      : 'Qué sigue. Estás en el último tramo'
+                  }
+                  accessibilityRole="button"
                   onPress={() => {
-                    const nextStep = routeSteps[currentStepIndex + 1];
-                    if (nextStep) {
-                      speak(`El siguiente paso es: ${nextStep.instruction}`);
-                    } else {
-                      speak('Estás en el último tramo de tu viaje.');
-                    }
+                    runQuickMenuAction(() =>
+                      nextStep
+                        ? speak(`El siguiente paso es: ${nextStep.instruction}`)
+                        : speak('Estás en el último tramo de tu viaje.'),
+                    );
                   }}
                   style={styles.drawerItem}
                 >
                   <Ionicons color="#FFFFFF" name="arrow-forward-circle" size={18} />
-                  <Text style={styles.drawerItemText}>¿Qué sigue?</Text>
+                  <View style={styles.drawerItemContent}>
+                    <Text style={styles.drawerItemText}>¿Qué sigue?</Text>
+                    <Text numberOfLines={2} style={styles.drawerItemHint}>
+                      {nextStep?.instruction ?? 'Último tramo del viaje'}
+                    </Text>
+                  </View>
+                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
-                  onPress={() => {
-                    setShowQuickMenu(false);
-                    speakCurrentInstruction();
-                  }}
+                  accessibilityHint="Repite por voz la indicación actual"
+                  accessibilityLabel="Escuchar de nuevo la indicación actual"
+                  accessibilityRole="button"
+                  onPress={() => runQuickMenuAction(speakCurrentInstruction)}
                   style={styles.drawerItem}
                 >
                   <Ionicons color="#FFFFFF" name="volume-high" size={18} />
-                  <Text style={styles.drawerItemText}>Escuchar de nuevo</Text>
+                  <View style={styles.drawerItemContent}>
+                    <Text style={styles.drawerItemText}>Escuchar de nuevo</Text>
+                    <Text style={styles.drawerItemHint}>Repetir la indicación actual</Text>
+                  </View>
+                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
-                  onPress={() => speak('Abriendo configuraciones de volumen y voz.')}
+                  accessibilityHint="Abre la pantalla de configuración"
+                  accessibilityLabel="Ajustes de audio"
+                  accessibilityRole="button"
+                  onPress={() =>
+                    runQuickMenuAction(() => {
+                      router.push('/settings');
+                    })
+                  }
                   style={styles.drawerItem}
                 >
                   <Ionicons color="#FFFFFF" name="options" size={18} />
-                  <Text style={styles.drawerItemText}>Ajustes de audio</Text>
+                  <View style={styles.drawerItemContent}>
+                    <Text style={styles.drawerItemText}>Ajustes de audio</Text>
+                    <Text style={styles.drawerItemHint}>Configurar voz y simulación</Text>
+                  </View>
+                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
                 </Pressable>
               </View>
 
-              <Pressable onPress={() => setShowQuickMenu(false)} style={styles.drawerCloseBtn}>
+              <Pressable
+                accessibilityLabel="Cerrar opciones del viaje"
+                accessibilityRole="button"
+                onPress={closeQuickMenu}
+                style={styles.drawerCloseBtn}
+              >
                 <Text style={styles.drawerCloseBtnText}>Cerrar</Text>
               </Pressable>
             </View>
           </View>
-        )}
+        </Modal>
       </SafeAreaView>
     </View>
   );
@@ -2400,7 +2612,47 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
+  },
+  travelModeSelector: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  travelModeLabel: {
+    color: '#AEB7C7',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  travelModeRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  travelModeButton: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: '#1D2633',
+    borderRadius: 10,
+    backgroundColor: '#0C1118',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  travelModeButtonSelected: {
+    borderColor: '#6A29FF',
+    backgroundColor: '#6A29FF',
+  },
+  travelModeButtonText: {
+    color: '#7F8A9B',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  travelModeButtonTextSelected: {
+    color: '#FFFFFF',
   },
   micButtonContainer: {
     marginBottom: 36,
@@ -3378,27 +3630,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
   },
-  bottomDrawerContent: {
-    position: 'absolute',
-    bottom: 0,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    borderWidth: 0,
-    borderTopWidth: 1,
-    borderTopColor: '#1D2633',
+  quickMenuModal: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '92%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#293548',
   },
-  drawerHeader: {
+  quickMenuHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
-  drawerHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#3A4350',
-    marginBottom: 10,
+  quickMenuHeaderText: {
+    flex: 1,
+  },
+  quickMenuSubtitle: {
+    color: '#7F8A9B',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  quickMenuHeaderClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E293B',
   },
   drawerTitle: {
     color: '#FFFFFF',
@@ -3410,8 +3671,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   drawerItem: {
-    height: 48,
-    borderRadius: 8,
+    minHeight: 62,
+    borderRadius: 12,
     backgroundColor: '#05070B',
     borderWidth: 1,
     borderColor: '#1D2633',
@@ -3420,10 +3681,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
+  drawerItemContent: {
+    flex: 1,
+  },
   drawerItemText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
+  },
+  drawerItemHint: {
+    color: '#7F8A9B',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 3,
   },
   drawerCloseBtn: {
     height: 44,

@@ -26,6 +26,15 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+    plugins: [
+      ...(config.plugins || []),
+      [
+        'react-native-maps',
+        {
+          androidGoogleMapsApiKey: googleMapKey || undefined,
+        },
+      ],
+    ],
     extra: {
       ...config.extra,
       googleMapKey: googleMapKey || undefined,
