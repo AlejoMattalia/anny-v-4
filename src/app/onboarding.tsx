@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getOnboardingSteps, type OnboardingStep } from '@/lib/api';
+import { appApiUrl, getOnboardingSteps, type OnboardingStep } from '@/lib/api';
 import { markOnboardingSeen } from '@/lib/onboarding-storage';
 import { speak } from '@/lib/voice';
 
@@ -99,7 +99,11 @@ export default function OnboardingScreen() {
             ) : error ? (
               <View style={styles.stateBox}>
                 <Text style={styles.errorText}>{error}</Text>
-                <Text style={styles.stateText}>Configurá `EXPO_PUBLIC_APP_API_URL` para leerlos desde el backend.</Text>
+                <Text style={styles.stateText}>
+                  {appApiUrl
+                    ? 'Revisá tu conexión e intentá nuevamente.'
+                    : 'Configurá EXPO_PUBLIC_APP_API_URL para leerlos desde el backend.'}
+                </Text>
               </View>
             ) : (
               <>
