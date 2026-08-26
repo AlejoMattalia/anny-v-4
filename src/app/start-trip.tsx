@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useCompass } from '@/hooks/use-compass';
 import { searchLocations } from '@/lib/location-search';
 import { sendDestinationAlert } from '@/lib/notification-service';
 import { loadSettings } from '@/lib/settings-storage';
@@ -59,6 +60,8 @@ interface RouteStep {
     numberOfStops: number;
     departureTime: string;
     arrivalTime: string;
+    departureTimestamp: number | null;
+    arrivalTimestamp: number | null;
   };
 }
 
@@ -76,17 +79,19 @@ interface RouteResult extends CalculatedRoute {
 }
 
 type SimulationPhase = 'idle' | 'intro' | 'running';
+type TransitSimulationPhase = 'idle' | 'waiting' | 'arriving' | 'onboard';
 type NavigationPanel = 'instruction' | 'next' | 'progress' | 'awareness';
 type TravelMode = 'transit' | 'driving' | 'walking';
+type TransitJourneyStage = 'walk_to_stop' | 'waiting' | 'onboard' | 'final_walk';
 
 const TRAVEL_MODES: {
   value: TravelMode;
   label: string;
   icon: 'bus' | 'car' | 'walk';
 }[] = [
-  { value: 'transit', label: 'Transporte', icon: 'bus' },
+  { value: 'walking', label: 'Caminando', icon: 'walk' },
+  { value: 'transit', label: 'Colectivo', icon: 'bus' },
   { value: 'driving', label: 'Auto', icon: 'car' },
-  { value: 'walking', label: 'A pie', icon: 'walk' },
 ];
 
 function getTravelModeParam(value: string | string[] | undefined): TravelMode {
@@ -104,6 +109,9 @@ const GOOGLE_MAP_KEY =
 const INTRO_PHASE_SECONDS = 4;
 const SIMULATION_STEP_MIN_SECONDS = 5;
 const SIMULATION_STEP_MAX_SECONDS = 12;
+const SIMULATION_WAIT_SECONDS = 4;
+const SIMULATION_BUS_ARRIVAL_SECONDS = 3;
+const SIMULATION_SECONDS_PER_STOP = 3;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -123,6 +131,37 @@ function distanceInMeters(
     Math.sin(latitudeDelta / 2) ** 2 +
     Math.cos(fromLatitude) * Math.cos(toLatitude) * Math.sin(longitudeDelta / 2) ** 2;
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function bearingInDegrees(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+) {
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const toDegrees = (radians: number) => (radians * 180) / Math.PI;
+  const startLatitude = toRadians(from.latitude);
+  const endLatitude = toRadians(to.latitude);
+  const longitudeDelta = toRadians(to.longitude - from.longitude);
+  const y = Math.sin(longitudeDelta) * Math.cos(endLatitude);
+  const x =
+    Math.cos(startLatitude) * Math.sin(endLatitude) -
+    Math.sin(startLatitude) * Math.cos(endLatitude) * Math.cos(longitudeDelta);
+  return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+}
+
+function getOrientationInstruction(currentHeading: number, targetBearing: number) {
+  const turn = ((targetBearing - currentHeading + 540) % 360) - 180;
+  const magnitude = Math.abs(turn);
+
+  if (magnitude <= 20) return 'Seguí en línea recta';
+  if (magnitude >= 160) return 'Girá para quedar en el sentido contrario';
+  if (turn > 0) return magnitude <= 70 ? 'Girate levemente a la derecha' : 'Girá a la derecha';
+  return magnitude <= 70 ? 'Girate levemente a la izquierda' : 'Girá a la izquierda';
+}
+
+function getMinutesUntil(timestamp: number | null | undefined) {
+  if (!timestamp) return null;
+  return Math.max(0, Math.ceil((timestamp * 1000 - Date.now()) / 60_000));
 }
 
 function distanceToRouteInMeters(
@@ -180,6 +219,14 @@ function getApproachAnnouncement(step: RouteStep, distance: number) {
 
 function getSimulatedStepDuration(step: RouteStep, simulationSpeed: number) {
   if (step.type === 'arrival') return 3;
+
+  if (step.transit) {
+    return Math.max(
+      3,
+      (Math.max(1, step.transit.numberOfStops) * SIMULATION_SECONDS_PER_STOP) /
+        simulationSpeed,
+    );
+  }
 
   const scaledDuration = Math.round(step.duration / 10);
   const baseDuration = clamp(scaledDuration, SIMULATION_STEP_MIN_SECONDS, SIMULATION_STEP_MAX_SECONDS);
@@ -298,6 +345,8 @@ function mapGoogleTransitRoute(route: any, index: number): CalculatedRoute | nul
               numberOfStops,
               departureTime: transitDetails.departure_time?.text || '',
               arrivalTime: transitDetails.arrival_time?.text || '',
+              departureTimestamp: transitDetails.departure_time?.value ?? null,
+              arrivalTimestamp: transitDetails.arrival_time?.value ?? null,
             },
           }
         : {}),
@@ -620,6 +669,7 @@ export default function StartTripScreen() {
 
   const [state, setState] = useState<TripState>(initialPlannedDest ? 'trip_summary' : 'search_start');
   const [selectedDest, setSelectedDest] = useState<LocationResult | null>(initialPlannedDest);
+  const compassHeading = useCompass(state === 'navigating' && travelMode !== 'driving');
 
   // User location and geocoded info
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -631,6 +681,9 @@ export default function StartTripScreen() {
   const [isSearchingResults, setIsSearchingResults] = useState(false);
   const voiceSearchSession = useRef(0);
   const lastApproachAnnouncement = useRef('');
+  const lastOrientationAnnouncement = useRef('');
+  const lastTransitStopAnnouncement = useRef('');
+  const hasAutoStartedSimulation = useRef(false);
   const hasSentDestinationAlert = useRef(false);
   const consecutiveOffRouteReadings = useRef(0);
   const reroutingInProgress = useRef(false);
@@ -650,9 +703,14 @@ export default function StartTripScreen() {
   const [selectedTransitRouteId, setSelectedTransitRouteId] = useState('');
   const [liveDistanceToNextStep, setLiveDistanceToNextStep] = useState<number | null>(null);
   const [simulationPhase, setSimulationPhase] = useState<SimulationPhase>('idle');
-  const [simulationTick, setSimulationTick] = useState(Date.now());
+  const [transitSimulationPhase, setTransitSimulationPhase] =
+    useState<TransitSimulationPhase>('idle');
+  const [simulationTick, setSimulationTick] = useState(() => Date.now());
   const [stepStartedAt, setStepStartedAt] = useState<number | null>(null);
   const [isRecalculatingRoute, setIsRecalculatingRoute] = useState(false);
+  const [boardedTransitStepIndex, setBoardedTransitStepIndex] = useState<number | null>(null);
+  const [journeyRating, setJourneyRating] = useState(0);
+  const availableRouteCount = transitAlternatives.length || (routeSteps.length > 0 ? 1 : 0);
 
   // Overlay states
   const [showWhereAmI, setShowWhereAmI] = useState(false);
@@ -660,11 +718,10 @@ export default function StartTripScreen() {
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showRouteMap, setShowRouteMap] = useState(false);
   const [routeMapSize, setRouteMapSize] = useState({ width: 1, height: 1 });
-  const [hasAutoStartedSimulation, setHasAutoStartedSimulation] = useState(false);
   const [simulationSpeed, setSimulationSpeed] = useState(1);
   const [destinationAlertsEnabled, setDestinationAlertsEnabled] = useState(true);
   const [notificationDistance, setNotificationDistance] = useState(400);
-  const [lastAnnouncedSceneKey, setLastAnnouncedSceneKey] = useState('');
+  const lastAnnouncedSceneKey = useRef('');
 
   const handleSelectTravelMode = (mode: TravelMode, label: string) => {
     if (mode === travelMode) return;
@@ -691,13 +748,16 @@ export default function StartTripScreen() {
 
   const renderTravelModeSelector = () => (
     <View style={styles.travelModeSelector}>
-      <Text style={styles.travelModeLabel}>Cómo querés viajar</Text>
+      <Text style={styles.travelModeLabel}>
+        Cómo querés viajar · {TRAVEL_MODES.length} opciones
+      </Text>
       <View accessibilityRole="radiogroup" style={styles.travelModeRow}>
-        {TRAVEL_MODES.map((mode) => {
+        {TRAVEL_MODES.map((mode, index) => {
           const isSelected = travelMode === mode.value;
           return (
             <Pressable
               accessibilityLabel={`Viajar en ${mode.label}`}
+              accessibilityHint={`Opción ${index + 1} de ${TRAVEL_MODES.length}`}
               accessibilityRole="radio"
               accessibilityState={{ checked: isSelected }}
               key={mode.value}
@@ -765,6 +825,19 @@ export default function StartTripScreen() {
     void initializeSettings();
   }, []);
 
+  const resetSimulation = () => {
+    setSimulationPhase('idle');
+    setStepStartedAt(null);
+    setSimulationTick(Date.now());
+    lastAnnouncedSceneKey.current = '';
+    setIsRecalculatingRoute(false);
+    setBoardedTransitStepIndex(null);
+    setTransitSimulationPhase('idle');
+    consecutiveOffRouteReadings.current = 0;
+    lastOrientationAnnouncement.current = '';
+    lastTransitStopAnnouncement.current = '';
+  };
+
   const loadRoute = async (
     origin: { latitude: number; longitude: number },
     dest: LocationResult
@@ -775,6 +848,7 @@ export default function StartTripScreen() {
     setRouteError('');
     try {
       resetSimulation();
+      hasAutoStartedSimulation.current = false;
       const data = await fetchRoute(origin, dest, travelMode);
       setRouteSteps(data.steps);
       setTotalDistance(data.distance);
@@ -783,11 +857,15 @@ export default function StartTripScreen() {
       setTransitAlternatives(data.alternatives ?? []);
       setSelectedTransitRouteId(data.id ?? '');
       setCurrentStepIndex(0);
+      setBoardedTransitStepIndex(null);
       setState('trip_summary');
 
       const distanceKm = (data.distance / 1000).toFixed(1);
       const minutes = Math.round(data.duration / 60);
-      void speak(`Ruta en ${travelModeLabel} calculada hacia ${dest.name}. Distancia total de ${distanceKm} kilómetros. Tiempo aproximado de ${minutes} minutos. ¿Listo para iniciar?`);
+      const routeCount = data.alternatives?.length ?? 1;
+      void speak(
+        `Ruta en ${travelModeLabel} calculada hacia ${dest.name}. ${routeCount} ${routeCount === 1 ? 'ruta disponible' : 'rutas disponibles'}. Distancia total de ${distanceKm} kilómetros. Tiempo aproximado de ${minutes} minutos. Elegí una ruta y confirmá para ${isSimulationEntry ? 'simular' : 'iniciar'}.`,
+      );
     } catch (err) {
       console.warn(err);
       const message =
@@ -828,13 +906,14 @@ export default function StartTripScreen() {
     }
   };
 
-  const selectTransitRoute = (route: CalculatedRoute) => {
+  const selectTransitRoute = (route: CalculatedRoute, index: number) => {
     setRouteSteps(route.steps);
     setTotalDistance(route.distance);
     setTotalDuration(route.duration);
     setRouteShape(route.shape);
     setSelectedTransitRouteId(route.id ?? '');
     setCurrentStepIndex(0);
+    setBoardedTransitStepIndex(null);
     setLiveDistanceToNextStep(null);
 
     const lines =
@@ -842,7 +921,7 @@ export default function StartTripScreen() {
         ? ` Líneas: ${route.transitLines.join(', ')}.`
         : '';
     void speak(
-      `Opción seleccionada. Duración aproximada de ${Math.max(1, Math.round(route.duration / 60))} minutos.${lines}`,
+      `Ruta ${index + 1} de ${transitAlternatives.length}, seleccionada. Duración aproximada de ${Math.max(1, Math.round(route.duration / 60))} minutos.${lines}`,
     );
   };
 
@@ -904,27 +983,9 @@ export default function StartTripScreen() {
     }
   }, [selectedDest, state, userLocation, params.originLat, params.originLng, travelMode]);
 
-  useEffect(() => {
-    const shouldAutoStartSimulation =
-      params.autoStartSimulation === '1' &&
-      state === 'trip_summary' &&
-      routeSteps.length > 0 &&
-      !loadingRoute &&
-      !hasAutoStartedSimulation;
-
-    if (!shouldAutoStartSimulation) {
-      return;
-    }
-
-    setHasAutoStartedSimulation(true);
-    handleStartNav();
-  }, [hasAutoStartedSimulation, loadingRoute, params.autoStartSimulation, routeSteps.length, state]);
-
   // Debounced query logic for keyboard search
   useEffect(() => {
     if (searchQuery.trim().length < 3) {
-      setApiResults([]);
-      setIsSearchingResults(false);
       return;
     }
     const timer = setTimeout(async () => {
@@ -947,7 +1008,7 @@ export default function StartTripScreen() {
 
     const interval = setInterval(() => {
       setSimulationTick(Date.now());
-    }, 1000);
+    }, 500);
 
     return () => clearInterval(interval);
   }, [isSimulationEntry, state, simulationPhase]);
@@ -972,13 +1033,12 @@ export default function StartTripScreen() {
     setSelectedDest(item);
   };
 
-  const resetSimulation = () => {
-    setSimulationPhase('idle');
-    setStepStartedAt(null);
-    setSimulationTick(Date.now());
-    setLastAnnouncedSceneKey('');
-    setIsRecalculatingRoute(false);
-    consecutiveOffRouteReadings.current = 0;
+  const updateSearchQuery = (value: string) => {
+    setSearchQuery(value);
+    if (value.trim().length < 3) {
+      setApiResults([]);
+      setIsSearchingResults(false);
+    }
   };
 
   const goToStep = (index: number, announce = true) => {
@@ -990,8 +1050,26 @@ export default function StartTripScreen() {
     setLiveDistanceToNextStep(null);
     setStepStartedAt(Date.now());
     setSimulationTick(Date.now());
+    if (nextStep.type === 'bus') {
+      setBoardedTransitStepIndex(null);
+      setTransitSimulationPhase(isSimulationEntry ? 'waiting' : 'idle');
+      lastTransitStopAnnouncement.current = '';
+    } else {
+      setTransitSimulationPhase('idle');
+    }
 
     if (announce) {
+      if (routeSteps[index - 1]?.type === 'bus' && nextStep.type === 'walking') {
+        void speak(`Descenso confirmado. Comienza la caminata hasta ${selectedDest?.name || 'el destino final'}. ${getSimpleStepAnnouncement(nextStep)}`);
+        return;
+      }
+      if (nextStep.type === 'bus' && nextStep.transit) {
+        const waitMinutes = getMinutesUntil(nextStep.transit.departureTimestamp);
+        void speak(
+          `Llegaste a la parada ${nextStep.transit.departureStop}. Esperá el ${nextStep.transit.lineName}, sentido ${nextStep.transit.headsign || nextStep.transit.arrivalStop}.${waitMinutes === null ? '' : ` Llegada estimada en ${waitMinutes} ${waitMinutes === 1 ? 'minuto' : 'minutos'}.`}`,
+        );
+        return;
+      }
       const prefix =
         nextStep.type === 'crossing'
           ? 'Atención. '
@@ -1051,14 +1129,78 @@ export default function StartTripScreen() {
     setSimulationPhase(isSimulationEntry ? 'intro' : 'running');
     setStepStartedAt(Date.now());
     setSimulationTick(Date.now());
+    setJourneyRating(0);
+    setBoardedTransitStepIndex(null);
+    setTransitSimulationPhase(
+      isSimulationEntry && routeSteps[0]?.type === 'bus' ? 'waiting' : 'idle',
+    );
+    const firstTransitStep = routeSteps.find((step) => step.transit)?.transit;
+    const transitOverview = firstTransitStep
+      ? ` Primero caminaremos hasta la parada ${firstTransitStep.departureStop}. Después tomarás el ${firstTransitStep.lineName}, sentido ${firstTransitStep.headsign || firstTransitStep.arrivalStop}, durante ${firstTransitStep.numberOfStops} paradas.`
+      : '';
     void speak(
       isSimulationEntry
         ? 'Iniciando simulación completa del viaje. Preparándote para salir.'
-        : `Iniciando guía en tiempo real. ${getSimpleStepAnnouncement(routeSteps[0])}`,
+        : `Iniciando guía en tiempo real.${transitOverview} ${getSimpleStepAnnouncement(routeSteps[0])}`,
+    );
+  };
+
+  useEffect(() => {
+    const shouldAutoStart =
+      isSimulationEntry &&
+      params.autoStartSimulation === '1' &&
+      state === 'trip_summary' &&
+      routeSteps.length > 0 &&
+      !loadingRoute &&
+      !hasAutoStartedSimulation.current;
+
+    if (!shouldAutoStart) return;
+
+    hasAutoStartedSimulation.current = true;
+    const timer = setTimeout(() => {
+      hasSentDestinationAlert.current = false;
+      setState('navigating');
+      setCurrentStepIndex(0);
+      setSimulationPhase('intro');
+      setStepStartedAt(Date.now());
+      setSimulationTick(Date.now());
+      setJourneyRating(0);
+      setBoardedTransitStepIndex(null);
+      setTransitSimulationPhase(routeSteps[0]?.type === 'bus' ? 'waiting' : 'idle');
+      void speak('Iniciando simulación completa del viaje. Preparándote para salir.');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    isSimulationEntry,
+    loadingRoute,
+    params.autoStartSimulation,
+    routeSteps,
+    routeSteps.length,
+    state,
+  ]);
+
+  const handleBoardTransit = () => {
+    if (!routeSteps[currentStepIndex]?.transit) return;
+    const transit = routeSteps[currentStepIndex].transit;
+    setBoardedTransitStepIndex(currentStepIndex);
+    setTransitSimulationPhase(isSimulationEntry ? 'onboard' : 'idle');
+    lastTransitStopAnnouncement.current = '';
+    setStepStartedAt(Date.now());
+    setSimulationTick(Date.now());
+    void speak(
+      `Ascenso confirmado. Viajás en el ${transit.lineName} hasta ${transit.arrivalStop}. Son ${transit.numberOfStops} paradas y aproximadamente ${Math.max(1, Math.round(routeSteps[currentStepIndex].duration / 60))} minutos. Te avisaré dos paradas antes de bajar.`,
     );
   };
 
   const handleNextStep = () => {
+    if (
+      !isSimulationEntry &&
+      routeSteps[currentStepIndex]?.type === 'bus' &&
+      boardedTransitStepIndex !== currentStepIndex
+    ) {
+      void speak('Antes de continuar, confirmá que ya subiste al colectivo.');
+      return;
+    }
     const lastGuidanceIndex = Math.max(routeSteps.length - 2, 0);
 
     if (currentStepIndex < lastGuidanceIndex) {
@@ -1086,6 +1228,26 @@ export default function StartTripScreen() {
     setSimulationPhase('running');
     goToStep(lastGuidanceIndex, false);
     void speak(`Volviendo al tramo anterior. ${getSimpleStepAnnouncement(lastGuidanceStep)}`);
+  };
+
+  const finishJourney = (continueTravelling = false) => {
+    const ratingMessage = journeyRating > 0
+      ? ` Gracias por calificar el viaje con ${journeyRating} ${journeyRating === 1 ? 'estrella' : 'estrellas'}.`
+      : '';
+    void speak(
+      continueTravelling
+        ? `Tramo finalizado.${ratingMessage} Elegí el próximo destino o colectivo para continuar.`
+        : `Viaje finalizado.${ratingMessage}`,
+    );
+    resetSimulation();
+    setState('search_start');
+    setSelectedDest(null);
+    updateSearchQuery('');
+    setRouteSteps([]);
+    setJourneyRating(0);
+    if (continueTravelling) {
+      setTravelMode('transit');
+    }
   };
 
   const speakCurrentInstruction = () => {
@@ -1188,6 +1350,13 @@ export default function StartTripScreen() {
           return;
         }
 
+        if (
+          routeSteps[currentStepIndex]?.type === 'bus' &&
+          boardedTransitStepIndex !== currentStepIndex
+        ) {
+          return;
+        }
+
         const gpsAccuracy = position.coords.accuracy ?? 20;
         const offRouteThreshold = Math.max(
           travelMode === 'walking' ? 35 : travelMode === 'driving' ? 55 : 65,
@@ -1278,6 +1447,7 @@ export default function StartTripScreen() {
       subscription?.remove();
     };
   }, [
+    boardedTransitStepIndex,
     currentStepIndex,
     destinationAlertsEnabled,
     isSimulationEntry,
@@ -1315,6 +1485,23 @@ export default function StartTripScreen() {
 
   const currentStep = routeSteps[currentStepIndex] || null;
   const nextStep = routeSteps[currentStepIndex + 1] || null;
+  const firstTransitStepIndex = routeSteps.findIndex((step) => step.type === 'bus');
+  const lastTransitStepIndex = routeSteps.reduce(
+    (lastIndex, step, index) => (step.type === 'bus' ? index : lastIndex),
+    -1,
+  );
+  const transitJourneyStage: TransitJourneyStage | null =
+    travelMode !== 'transit' || firstTransitStepIndex < 0
+      ? null
+      : currentStep?.type === 'bus'
+        ? boardedTransitStepIndex === currentStepIndex
+          ? 'onboard'
+          : 'waiting'
+        : currentStepIndex < firstTransitStepIndex
+          ? 'walk_to_stop'
+          : currentStepIndex > lastTransitStepIndex
+            ? 'final_walk'
+            : 'walk_to_stop';
   const stepElapsedSeconds = stepStartedAt ? Math.max(0, Math.floor((simulationTick - stepStartedAt) / 1000)) : 0;
   const simulatedStepDuration = currentStep ? getSimulatedStepDuration(currentStep, simulationSpeed) : 0;
   const introCountdown = simulationPhase === 'intro'
@@ -1328,6 +1515,28 @@ export default function StartTripScreen() {
       ? clamp(1 - liveDistanceToNextStep / currentStep.distance, 0, 1)
       : 0;
   const currentStepProgress = isSimulationEntry ? simulationProgress : liveStepProgress;
+  const currentTransitStop = currentStep?.transit?.numberOfStops
+    ? Math.min(
+        currentStep.transit.numberOfStops,
+        Math.max(1, Math.floor(currentStepProgress * currentStep.transit.numberOfStops) + 1),
+      )
+    : 0;
+  const transitStopsRemaining = currentStep?.transit
+    ? Math.max(0, currentStep.transit.numberOfStops - currentTransitStop)
+    : 0;
+  const initialWalkDuration = firstTransitStepIndex > 0
+    ? routeSteps.slice(0, firstTransitStepIndex).reduce((sum, step) => sum + step.duration, 0)
+    : 0;
+  const finalWalkDuration = lastTransitStepIndex >= 0
+    ? routeSteps.slice(lastTransitStepIndex + 1).reduce((sum, step) => sum + step.duration, 0)
+    : 0;
+  const transitStopCount = routeSteps.reduce(
+    (sum, step) => sum + (step.transit?.numberOfStops ?? 0),
+    0,
+  );
+  const firstTransitDetails = firstTransitStepIndex >= 0
+    ? routeSteps[firstTransitStepIndex]?.transit
+    : undefined;
   const overallProgress = routeSteps.length > 1
     ? Math.min((currentStepIndex + currentStepProgress) / Math.max(routeSteps.length - 1, 1), 1)
     : 0;
@@ -1387,21 +1596,145 @@ export default function StartTripScreen() {
       });
     }
   }
-  const activeNavPanel: NavigationPanel = 'instruction';
+  const activeNavPanel = useMemo<NavigationPanel>(() => 'instruction', []);
   const showInlineSearchResults =
     state === 'search_start' && (searchQuery.trim().length > 0 || isSearchingResults || apiResults.length > 0);
+
+  useEffect(() => {
+    if (
+      !isSimulationEntry ||
+      state !== 'navigating' ||
+      simulationPhase !== 'running' ||
+      currentStep?.type !== 'bus' ||
+      !currentStep.transit
+    ) {
+      return;
+    }
+
+    if (transitSimulationPhase === 'waiting') {
+      const waitDuration = Math.max(
+        800,
+        (SIMULATION_WAIT_SECONDS * 1000) / simulationSpeed,
+      );
+      const timer = setTimeout(() => {
+        setTransitSimulationPhase('arriving');
+        void speak(
+          `El ${currentStep.transit?.lineName} está llegando a la parada. Verificá la línea y el sentido ${currentStep.transit?.headsign || currentStep.transit?.arrivalStop}.`,
+        );
+      }, waitDuration);
+      return () => clearTimeout(timer);
+    }
+
+    if (transitSimulationPhase === 'arriving') {
+      const arrivalDuration = Math.max(
+        800,
+        (SIMULATION_BUS_ARRIVAL_SECONDS * 1000) / simulationSpeed,
+      );
+      const timer = setTimeout(() => {
+        setBoardedTransitStepIndex(currentStepIndex);
+        setTransitSimulationPhase('onboard');
+        lastTransitStopAnnouncement.current = '';
+        setStepStartedAt(Date.now());
+        setSimulationTick(Date.now());
+        void speak(
+          `Ascenso simulado. Viajás en el ${currentStep.transit?.lineName} hasta ${currentStep.transit?.arrivalStop}. Son ${currentStep.transit?.numberOfStops} paradas.`,
+        );
+      }, arrivalDuration);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    currentStep,
+    currentStepIndex,
+    isSimulationEntry,
+    simulationPhase,
+    simulationSpeed,
+    state,
+    transitSimulationPhase,
+  ]);
+
+  useEffect(() => {
+    if (
+      state !== 'navigating' ||
+      isSimulationEntry ||
+      simulationPhase === 'intro' ||
+      !userLocation ||
+      compassHeading === null ||
+      !nextStep ||
+      (transitJourneyStage !== 'walk_to_stop' && transitJourneyStage !== 'final_walk' && travelMode !== 'walking')
+    ) {
+      return;
+    }
+
+    const orientation = getOrientationInstruction(
+      compassHeading,
+      bearingInDegrees(userLocation, nextStep),
+    );
+    const announcementKey = `${currentStepIndex}-${orientation}`;
+    if (lastOrientationAnnouncement.current === announcementKey) return;
+
+    lastOrientationAnnouncement.current = announcementKey;
+    void speak(`${orientation} para continuar hacia ${transitJourneyStage === 'walk_to_stop' ? firstTransitDetails?.departureStop || 'la parada' : selectedDest?.name || 'el próximo punto'}.`);
+  }, [
+    compassHeading,
+    currentStep,
+    currentStepIndex,
+    firstTransitDetails?.departureStop,
+    isSimulationEntry,
+    nextStep,
+    selectedDest?.name,
+    simulationPhase,
+    state,
+    transitJourneyStage,
+    travelMode,
+    userLocation,
+  ]);
+
+  useEffect(() => {
+    const transit = currentStep?.transit;
+    if (
+      state !== 'navigating' ||
+      transitJourneyStage !== 'onboard' ||
+      !transit ||
+      currentTransitStop <= 0
+    ) {
+      return;
+    }
+
+    const announcementKey = `${currentStepIndex}-${currentTransitStop}`;
+    if (lastTransitStopAnnouncement.current === announcementKey) return;
+
+    lastTransitStopAnnouncement.current = announcementKey;
+    if (transitStopsRemaining === 2) {
+      void speak(`Atención. Faltan dos paradas para bajar en ${transit.arrivalStop}. Preparáte para descender.`);
+    } else if (transitStopsRemaining === 1) {
+      void speak(`Atención. La próxima es tu parada, ${transit.arrivalStop}. Preparáte para descender.`);
+    } else {
+      void speak(`Avance estimado: parada ${currentTransitStop} de ${transit.numberOfStops}. Continuamos hacia ${transit.arrivalStop}.`);
+    }
+  }, [
+    currentStep,
+    currentStepIndex,
+    currentTransitStop,
+    state,
+    transitJourneyStage,
+    transitStopsRemaining,
+  ]);
 
   useEffect(() => {
     if (!isSimulationEntry || state !== 'navigating' || simulationPhase !== 'running' || !currentStep) {
       return;
     }
 
-    const sceneKey = `${currentStepIndex}-${activeNavPanel}`;
-    if (sceneKey === lastAnnouncedSceneKey) {
+    if (currentStep.type === 'bus' && transitSimulationPhase !== 'onboard') {
       return;
     }
 
-    setLastAnnouncedSceneKey(sceneKey);
+    const sceneKey = `${currentStepIndex}-${activeNavPanel}`;
+    if (sceneKey === lastAnnouncedSceneKey.current) {
+      return;
+    }
+
+    lastAnnouncedSceneKey.current = sceneKey;
 
     if (activeNavPanel === 'progress') {
       const distanceText =
@@ -1431,17 +1764,21 @@ export default function StartTripScreen() {
     currentStep,
     currentStepIndex,
     isSimulationEntry,
-    lastAnnouncedSceneKey,
     nextStep,
     remainingDistance,
     remainingDuration,
     routeSteps.length,
     simulationPhase,
     state,
+    transitSimulationPhase,
   ]);
 
   useEffect(() => {
     if (!isSimulationEntry || state !== 'navigating' || simulationPhase !== 'running' || !currentStep) {
+      return;
+    }
+
+    if (currentStep.type === 'bus' && transitSimulationPhase !== 'onboard') {
       return;
     }
 
@@ -1450,14 +1787,18 @@ export default function StartTripScreen() {
       return;
     }
 
-    if (currentStepIndex >= lastGuidanceIndex) {
-      resetSimulation();
-      setState('nav_arrival');
-      void speak('Has llegado a tu destino. Tu destino está frente a ti.');
-      return;
-    }
+    const timer = setTimeout(() => {
+      if (currentStepIndex >= lastGuidanceIndex) {
+        resetSimulation();
+        setState('nav_arrival');
+        void speak('Has llegado a tu destino. Tu destino está frente a ti.');
+        return;
+      }
 
-    goToStep(currentStepIndex + 1);
+      goToStep(currentStepIndex + 1);
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [
     currentStep,
     currentStepIndex,
@@ -1467,6 +1808,7 @@ export default function StartTripScreen() {
     simulationPhase,
     state,
     stepElapsedSeconds,
+    transitSimulationPhase,
   ]);
 
   const renderSearchResults = () => (
@@ -1527,7 +1869,7 @@ export default function StartTripScreen() {
                   setState('search_start');
                 } else if (state === 'search_results') {
                   setState('search_start');
-                  setSearchQuery('');
+                  updateSearchQuery('');
                 } else {
                   router.replace('/travel');
                 }
@@ -1560,10 +1902,10 @@ export default function StartTripScreen() {
                 placeholder="Escribe tu destino..."
                 placeholderTextColor="#7F8A9B"
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={updateSearchQuery}
               />
               {searchQuery.length > 0 && (
-                <Pressable onPress={() => setSearchQuery('')}>
+                <Pressable onPress={() => updateSearchQuery('')}>
                   <Ionicons color="#7F8A9B" name="close-circle" size={18} />
                 </Pressable>
               )}
@@ -1654,7 +1996,7 @@ export default function StartTripScreen() {
                 voiceSearchSession.current += 1;
                 stopListening();
                 setState('search_start');
-                setSearchQuery('');
+                  updateSearchQuery('');
               }}
               style={styles.cancelSearchBtn}
             >
@@ -1675,10 +2017,10 @@ export default function StartTripScreen() {
                 placeholder="Escribe tu destino..."
                 placeholderTextColor="#7F8A9B"
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={updateSearchQuery}
               />
               {searchQuery.length > 0 && (
-                <Pressable onPress={() => setSearchQuery('')}>
+                <Pressable onPress={() => updateSearchQuery('')}>
                   <Ionicons color="#7F8A9B" name="close-circle" size={18} />
                 </Pressable>
               )}
@@ -1689,7 +2031,7 @@ export default function StartTripScreen() {
             <Pressable
               onPress={() => {
                 setState('search_start');
-                setSearchQuery('');
+                  updateSearchQuery('');
               }}
               style={styles.searchAgainBtn}
             >
@@ -1702,7 +2044,7 @@ export default function StartTripScreen() {
         {/* 4. TRIP SUMMARY */}
         {state === 'trip_summary' && selectedDest && (
           <View style={styles.flexContainer}>
-            <Text style={styles.sectionHeader}>Resumen del viaje</Text>
+            <Text accessibilityRole="header" style={styles.sectionHeader}>Resumen del viaje</Text>
 
             <View style={styles.destinationSummaryCard}>
               <View style={styles.summaryDestIcon}>
@@ -1717,7 +2059,13 @@ export default function StartTripScreen() {
             {renderTravelModeSelector()}
 
             {loadingRoute ? (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <View
+                accessibilityLabel={`Calculando mejor ruta en ${travelModeLabel}`}
+                accessibilityLiveRegion="polite"
+                accessibilityRole="progressbar"
+                accessibilityState={{ busy: true }}
+                style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+              >
                 <ActivityIndicator color="#6A29FF" size="large" />
                 <Text style={{ color: '#7F8A9B', marginTop: 12, fontWeight: '800' }}>
                   Calculando mejor ruta en {travelModeLabel}...
@@ -1760,11 +2108,13 @@ export default function StartTripScreen() {
               </View>
             ) : (
               <>
-                <Text style={styles.summaryLabel}>Recorrido recomendado</Text>
-                {travelMode === 'transit' && transitAlternatives.length > 1 && (
-                  <View style={styles.transitAlternatives}>
+                <Text accessibilityLiveRegion="polite" style={styles.summaryLabel}>
+                  {availableRouteCount} {availableRouteCount === 1 ? 'ruta disponible' : 'rutas disponibles'}
+                </Text>
+                {transitAlternatives.length > 1 && (
+                  <View accessibilityRole="radiogroup" style={styles.transitAlternatives}>
                     <Text style={styles.transitAlternativesTitle}>
-                      {transitAlternatives.length} opciones disponibles
+                      Elegí una ruta
                     </Text>
                     <ScrollView
                       contentContainerStyle={styles.transitAlternativesList}
@@ -1775,9 +2125,12 @@ export default function StartTripScreen() {
                         const isSelected = route.id === selectedTransitRouteId;
                         return (
                           <Pressable
-                            accessibilityLabel={`Opción ${index + 1}. ${Math.max(1, Math.round(route.duration / 60))} minutos. Líneas ${route.transitLines?.join(', ') || 'disponibles'}`}
+                            accessibilityHint={`Ruta ${index + 1} de ${transitAlternatives.length}`}
+                            accessibilityLabel={`Ruta ${index + 1}. ${Math.max(1, Math.round(route.duration / 60))} minutos. ${route.distance > 1000 ? `${(route.distance / 1000).toFixed(1)} kilómetros` : `${route.distance} metros`}${route.transitLines?.length ? `. Líneas ${route.transitLines.join(', ')}` : ''}`}
+                            accessibilityRole="radio"
+                            accessibilityState={{ checked: isSelected }}
                             key={route.id}
-                            onPress={() => selectTransitRoute(route)}
+                            onPress={() => selectTransitRoute(route, index)}
                             style={[
                               styles.transitAlternativeCard,
                               isSelected && styles.transitAlternativeCardSelected,
@@ -1811,7 +2164,11 @@ export default function StartTripScreen() {
                     </ScrollView>
                   </View>
                 )}
-                <View style={styles.routeOptionCard}>
+                <View
+                  accessible
+                  accessibilityLabel={`Ruta seleccionada de ${availableRouteCount} disponibles, en ${travelModeLabel}. Tiempo estimado ${Math.round(totalDuration / 60)} minutos. Distancia total ${totalDistance > 1000 ? `${(totalDistance / 1000).toFixed(1)} kilómetros` : `${totalDistance} metros`}. ${routeSteps.length} indicaciones.`}
+                  style={styles.routeOptionCard}
+                >
                   <View style={styles.routePathRow}>
                     <View style={styles.routeSegment}>
                       <Ionicons
@@ -1833,6 +2190,42 @@ export default function StartTripScreen() {
                       <Text style={styles.routeSegmentSub}>{routeSteps.length} pasos</Text>
                     </View>
                   </View>
+
+                  {travelMode === 'transit' && firstTransitDetails && (
+                    <View
+                      accessible
+                      accessibilityLabel={`Flujo del viaje. Primero, caminata de ${Math.max(1, Math.round(initialWalkDuration / 60))} minutos hasta ${firstTransitDetails.departureStop}. Segundo, espera y recorrido en ${firstTransitDetails.lineName} durante ${transitStopCount} paradas. Tercero, caminata final de ${Math.max(1, Math.round(finalWalkDuration / 60))} minutos.`}
+                      style={styles.journeyFlow}
+                    >
+                      <View style={styles.journeyFlowStep}>
+                        <View style={[styles.journeyFlowIcon, styles.journeyFlowWalk]}>
+                          <Ionicons color="#FFFFFF" name="walk" size={17} />
+                        </View>
+                        <Text style={styles.journeyFlowTitle}>1. Hasta la parada</Text>
+                        <Text style={styles.journeyFlowDetail}>
+                          {Math.max(1, Math.round(initialWalkDuration / 60))} min
+                        </Text>
+                      </View>
+                      <Ionicons color="#596474" name="chevron-forward" size={16} />
+                      <View style={styles.journeyFlowStep}>
+                        <View style={[styles.journeyFlowIcon, styles.journeyFlowBus]}>
+                          <Ionicons color="#FFFFFF" name="bus" size={17} />
+                        </View>
+                        <Text style={styles.journeyFlowTitle}>2. Colectivo</Text>
+                        <Text style={styles.journeyFlowDetail}>{transitStopCount} paradas</Text>
+                      </View>
+                      <Ionicons color="#596474" name="chevron-forward" size={16} />
+                      <View style={styles.journeyFlowStep}>
+                        <View style={[styles.journeyFlowIcon, styles.journeyFlowWalk]}>
+                          <Ionicons color="#FFFFFF" name="walk" size={17} />
+                        </View>
+                        <Text style={styles.journeyFlowTitle}>3. Caminata final</Text>
+                        <Text style={styles.journeyFlowDetail}>
+                          {Math.max(1, Math.round(finalWalkDuration / 60))} min
+                        </Text>
+                      </View>
+                    </View>
+                  )}
 
                   <View style={styles.summaryDivider} />
 
@@ -1859,7 +2252,17 @@ export default function StartTripScreen() {
                   )}
                 </View>
 
-                <Pressable onPress={handleStartNav} style={styles.startNavButton}>
+                <Pressable
+                  accessibilityHint={
+                    isSimulationEntry
+                      ? 'Confirma la ruta seleccionada y comienza la demostración'
+                      : 'Confirma la ruta seleccionada y comienza la navegación'
+                  }
+                  accessibilityLabel={isSimulationEntry ? 'Confirmar y simular' : 'Confirmar e iniciar'}
+                  accessibilityRole="button"
+                  onPress={handleStartNav}
+                  style={styles.startNavButton}
+                >
                   <MaterialCommunityIcons color="#FFFFFF" name="navigation" size={22} />
                   <Text style={styles.startNavButtonText}>{screenTitle}</Text>
                 </Pressable>
@@ -1875,11 +2278,13 @@ export default function StartTripScreen() {
             <View
               style={[
                 styles.stepHeader,
-                simulationPhase === 'intro'
+                simulationPhase === 'intro' || transitJourneyStage === 'waiting'
                   ? styles.headerWaiting
-                  : currentStep.type === 'crossing'
-                    ? styles.headerCrossing
-                    : styles.headerWalking,
+                  : transitJourneyStage === 'onboard'
+                    ? styles.headerTransit
+                    : currentStep.type === 'crossing'
+                      ? styles.headerCrossing
+                      : styles.headerWalking,
               ]}
             >
               <Ionicons
@@ -1887,26 +2292,40 @@ export default function StartTripScreen() {
                 name={
                   simulationPhase === 'intro'
                     ? 'time-outline'
-                    : currentStep.type === 'crossing'
-                      ? 'warning-outline'
-                      : currentStep.type === 'bus'
+                    : transitJourneyStage === 'waiting'
+                      ? 'time-outline'
+                      : transitJourneyStage === 'onboard'
                         ? 'bus'
-                        : currentStep.type === 'driving'
-                          ? 'car'
-                          : 'walk'
+                        : currentStep.type === 'crossing'
+                          ? 'warning-outline'
+                          : currentStep.type === 'bus'
+                            ? 'bus'
+                            : currentStep.type === 'driving'
+                              ? 'car'
+                              : 'walk'
                 }
                 size={20}
               />
               <Text style={styles.stepHeaderTitle}>
                 {simulationPhase === 'intro'
                   ? 'Preparando salida'
-                  : currentStep.type === 'crossing'
-                    ? 'Cruce peatonal'
-                    : travelMode === 'transit'
-                      ? 'En transporte'
-                      : travelMode === 'driving'
-                        ? 'Conduciendo'
-                        : 'Caminando'}
+                  : transitJourneyStage === 'walk_to_stop'
+                    ? 'Caminata hasta la parada'
+                    : transitJourneyStage === 'waiting'
+                      ? transitSimulationPhase === 'arriving'
+                        ? 'Colectivo llegando'
+                        : 'Esperando el colectivo'
+                      : transitJourneyStage === 'onboard'
+                        ? 'Viaje en colectivo'
+                        : transitJourneyStage === 'final_walk'
+                          ? 'Caminata final'
+                          : currentStep.type === 'crossing'
+                            ? 'Cruce peatonal'
+                            : travelMode === 'transit'
+                              ? 'En transporte'
+                              : travelMode === 'driving'
+                                ? 'Conduciendo'
+                                : 'Caminando'}
               </Text>
             </View>
 
@@ -1915,11 +2334,17 @@ export default function StartTripScreen() {
                 <Text style={styles.simulationStatusLabel}>
                   {isRecalculatingRoute
                     ? 'Recalculando ruta'
-                    : simulationPhase === 'intro'
-                      ? 'Listo para comenzar'
-                      : isSimulationEntry
-                        ? 'Simulación en curso'
-                        : 'Navegación GPS en tiempo real'}
+                    : transitJourneyStage === 'waiting'
+                      ? transitSimulationPhase === 'arriving'
+                        ? `${currentStep.transit?.lineName || 'El colectivo'} está llegando`
+                        : `En la parada ${currentStep.transit?.departureStop || ''}`
+                      : transitJourneyStage === 'onboard'
+                        ? `Parada ${currentTransitStop} de ${currentStep.transit?.numberOfStops || 0}`
+                        : simulationPhase === 'intro'
+                          ? 'Listo para comenzar'
+                          : isSimulationEntry
+                            ? 'Simulación en curso'
+                            : 'Navegación GPS en tiempo real'}
                 </Text>
                 <Text style={styles.simulationStatusValue}>
                   {Math.round(overallProgress * 100)}%
@@ -1931,13 +2356,19 @@ export default function StartTripScreen() {
               <Text style={styles.simulationStatusHint}>
                 {isRecalculatingRoute
                   ? 'Detectamos un desvío. Buscando el mejor camino desde tu ubicación...'
-                  : simulationPhase === 'intro'
-                    ? `La guía arranca en ${introCountdown} s`
-                    : isSimulationEntry
-                      ? `Tramo ${currentStepIndex + 1} de ${Math.max(routeSteps.length - 1, 1)}`
-                      : liveDistanceToNextStep === null
-                        ? 'Esperando una posición GPS precisa...'
-                        : `Próxima indicación en ${liveDistanceToNextStep} m`}
+                  : transitJourneyStage === 'waiting'
+                    ? transitSimulationPhase === 'arriving'
+                      ? `Preparáte para subir. Sentido ${currentStep.transit?.headsign || currentStep.transit?.arrivalStop || 'indicado'}`
+                      : `Esperando ${currentStep.transit?.lineName || 'el colectivo'}, sentido ${currentStep.transit?.headsign || currentStep.transit?.arrivalStop || 'indicado'}`
+                    : transitJourneyStage === 'onboard'
+                      ? `Avance estimado: ${transitStopsRemaining} ${transitStopsRemaining === 1 ? 'parada restante' : 'paradas restantes'} hasta ${currentStep.transit?.arrivalStop || 'el descenso'}`
+                      : simulationPhase === 'intro'
+                        ? `La guía arranca en ${introCountdown} s`
+                        : isSimulationEntry
+                          ? `Tramo ${currentStepIndex + 1} de ${Math.max(routeSteps.length - 1, 1)}`
+                          : liveDistanceToNextStep === null
+                            ? 'Esperando una posición GPS precisa...'
+                            : `Próxima indicación en ${liveDistanceToNextStep} m`}
               </Text>
             </View>
 
@@ -1951,6 +2382,59 @@ export default function StartTripScreen() {
                   <Text style={styles.navDirectiveText}>Preparando tu salida</Text>
                   <Text style={styles.navDirectiveSub}>
                     Vamos a iniciar la guía paso a paso y cambiar la vista automáticamente durante el recorrido.
+                  </Text>
+                </View>
+              ) : transitJourneyStage === 'waiting' && currentStep.transit ? (
+                <View style={styles.transitStageCard}>
+                  <View style={[styles.directiveCircle, styles.circleBlue]}>
+                    <Ionicons
+                      color="#FFFFFF"
+                      name={transitSimulationPhase === 'arriving' ? 'bus' : 'bus-outline'}
+                      size={54}
+                    />
+                  </View>
+                  <Text style={styles.navDirectiveText}>
+                    {transitSimulationPhase === 'arriving'
+                      ? `Está llegando el ${currentStep.transit.lineName}`
+                      : `Esperá el ${currentStep.transit.lineName}`}
+                  </Text>
+                  <Text style={styles.navDirectiveSub}>
+                    Parada {currentStep.transit.departureStop}{'\n'}
+                    Sentido {currentStep.transit.headsign || currentStep.transit.arrivalStop}
+                  </Text>
+                  <Text accessibilityLiveRegion="polite" style={styles.transitWaitText}>
+                    {transitSimulationPhase === 'arriving'
+                      ? 'Preparáte para subir'
+                      : getMinutesUntil(currentStep.transit.departureTimestamp) === null
+                      ? `Salida ${currentStep.transit.departureTime || 'según horario disponible'}`
+                      : `Llegada estimada en ${getMinutesUntil(currentStep.transit.departureTimestamp)} min`}
+                  </Text>
+                  <Text style={styles.dataSourceHint}>
+                    {isSimulationEntry
+                      ? 'La llegada y el ascenso avanzan automáticamente en esta simulación.'
+                      : 'Estimación según horario. El proveedor no informa la posición GPS del vehículo.'}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel={`Confirmar que subí al ${currentStep.transit.lineName}`}
+                    accessibilityRole="button"
+                    onPress={handleBoardTransit}
+                    style={styles.boardTransitButton}
+                  >
+                    <Ionicons color="#FFFFFF" name="checkmark-circle" size={21} />
+                    <Text style={styles.boardTransitButtonText}>Ya subí al colectivo</Text>
+                  </Pressable>
+                </View>
+              ) : transitJourneyStage === 'onboard' && currentStep.transit ? (
+                <View style={styles.transitStageCard}>
+                  <View style={[styles.directiveCircle, styles.circleBlue]}>
+                    <Ionicons color="#FFFFFF" name="bus" size={54} />
+                  </View>
+                  <Text style={styles.navDirectiveText}>{currentStep.transit.lineName}</Text>
+                  <Text accessibilityLiveRegion="polite" style={styles.transitStopCounter}>
+                    Avance estimado: parada {currentTransitStop} de {currentStep.transit.numberOfStops}
+                  </Text>
+                  <Text style={styles.navDirectiveSub}>
+                    Bajá en {currentStep.transit.arrivalStop}. Te avisaré dos paradas antes.
                   </Text>
                 </View>
               ) : activeNavPanel === 'instruction' ? (
@@ -2137,11 +2621,12 @@ export default function StartTripScreen() {
               </Text>
               <Pressable
                 accessibilityLabel="Ir a la indicación siguiente"
-                disabled={simulationPhase === 'intro'}
+                disabled={simulationPhase === 'intro' || transitJourneyStage === 'waiting'}
                 onPress={handleNextStep}
                 style={[
                   styles.navigationStepBtn,
-                  simulationPhase === 'intro' && styles.navigationStepBtnDisabled,
+                  (simulationPhase === 'intro' || transitJourneyStage === 'waiting') &&
+                    styles.navigationStepBtnDisabled,
                 ]}
               >
                 <Text style={styles.navigationStepBtnText}>Siguiente</Text>
@@ -2166,6 +2651,31 @@ export default function StartTripScreen() {
             <Text style={styles.navDirectiveText}>Has llegado</Text>
             <Text style={styles.navDirectiveSub}>Tu destino está frente a ti</Text>
 
+            <View style={styles.ratingSection}>
+              <Text accessibilityRole="header" style={styles.ratingTitle}>¿Cómo estuvo el viaje?</Text>
+              <View accessibilityRole="radiogroup" style={styles.ratingRow}>
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <Pressable
+                    accessibilityLabel={`${rating} ${rating === 1 ? 'estrella' : 'estrellas'}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: journeyRating === rating }}
+                    key={rating}
+                    onPress={() => {
+                      setJourneyRating(rating);
+                      void speak(`Calificación: ${rating} ${rating === 1 ? 'estrella' : 'estrellas'}.`);
+                    }}
+                    style={styles.ratingButton}
+                  >
+                    <Ionicons
+                      color={rating <= journeyRating ? '#F4B740' : '#596474'}
+                      name={rating <= journeyRating ? 'star' : 'star-outline'}
+                      size={30}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
             <Pressable
               accessibilityLabel="Volver a la indicación anterior"
               onPress={handleReturnFromArrival}
@@ -2185,19 +2695,20 @@ export default function StartTripScreen() {
               </Pressable>
               <Pressable
                 accessibilityLabel="Finalizar viaje"
-                onPress={() => {
-                  resetSimulation();
-                  setHasAutoStartedSimulation(false);
-                  setState('search_start');
-                  setSelectedDest(null);
-                  setSearchQuery('');
-                  setRouteSteps([]);
-                }}
+                onPress={() => finishJourney(false)}
                 style={styles.navActionSolidBtn}
               >
                 <Text style={styles.navActionSolidText}>Finalizar viaje</Text>
               </Pressable>
             </View>
+            <Pressable
+              accessibilityLabel="Continuar viaje en otro colectivo"
+              onPress={() => finishJourney(true)}
+              style={styles.continueJourneyButton}
+            >
+              <Ionicons color="#FFFFFF" name="bus-outline" size={19} />
+              <Text style={styles.continueJourneyButtonText}>Continuar en otro colectivo</Text>
+            </Pressable>
           </View>
         )}
 
@@ -2385,10 +2896,9 @@ export default function StartTripScreen() {
                   onPress={() => {
                     setShowSOS(false);
                     resetSimulation();
-                    setHasAutoStartedSimulation(false);
                     setState('search_start');
                     setSelectedDest(null);
-                    setSearchQuery('');
+                  updateSearchQuery('');
                   }}
                   style={[styles.sosActionButton, styles.sosCancelTripButton]}
                 >
@@ -2604,7 +3114,7 @@ const styles = StyleSheet.create({
   logoText: {
     color: '#FFFFFF',
     fontSize: 20,
-    fontWeight: '950',
+    fontWeight: '900',
     letterSpacing: 2,
   },
   mainPrompt: {
@@ -2807,7 +3317,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     color: '#7F8A9B',
     fontSize: 11,
-    fontWeight: '950',
+    fontWeight: '900',
     textTransform: 'uppercase',
     marginTop: 8,
     marginBottom: 12,
@@ -2885,7 +3395,7 @@ const styles = StyleSheet.create({
   summaryDestName: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   summaryDestAddr: {
     color: '#7F8A9B',
@@ -2896,7 +3406,7 @@ const styles = StyleSheet.create({
   summaryLabel: {
     color: '#7F8A9B',
     fontSize: 11,
-    fontWeight: '950',
+    fontWeight: '900',
     textTransform: 'uppercase',
     marginBottom: 8,
   },
@@ -2965,6 +3475,45 @@ const styles = StyleSheet.create({
   activeTransitDetails: {
     alignItems: 'center',
     gap: 10,
+  },
+  journeyFlow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 10,
+    backgroundColor: '#111823',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  journeyFlowStep: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  journeyFlowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  journeyFlowWalk: {
+    backgroundColor: '#4DAA57',
+  },
+  journeyFlowBus: {
+    backgroundColor: '#208AEF',
+  },
+  journeyFlowTitle: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  journeyFlowDetail: {
+    color: '#8FC7FF',
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   routeOptionCard: {
     borderWidth: 1,
@@ -3065,7 +3614,7 @@ const styles = StyleSheet.create({
   startNavButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   // Active Navigation UI
   stepHeader: {
@@ -3086,10 +3635,13 @@ const styles = StyleSheet.create({
   headerWaiting: {
     backgroundColor: '#208AEF',
   },
+  headerTransit: {
+    backgroundColor: '#6A29FF',
+  },
   stepHeaderTitle: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '950',
+    fontWeight: '900',
     textTransform: 'uppercase',
   },
   simulationStatusCard: {
@@ -3115,7 +3667,7 @@ const styles = StyleSheet.create({
   simulationStatusValue: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   simulationProgressTrack: {
     height: 8,
@@ -3144,6 +3696,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  transitStageCard: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
+  },
+  transitWaitText: {
+    color: '#8FC7FF',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  transitStopCounter: {
+    color: '#B18CFF',
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  dataSourceHint: {
+    color: '#7F8A9B',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+  },
+  boardTransitButton: {
+    minHeight: 50,
+    borderRadius: 25,
+    backgroundColor: '#6A29FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    paddingHorizontal: 24,
+    marginTop: 4,
+  },
+  boardTransitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   infoSceneCard: {
     width: '100%',
     borderWidth: 1,
@@ -3167,7 +3760,7 @@ const styles = StyleSheet.create({
   infoSceneTitle: {
     color: '#FFFFFF',
     fontSize: 24,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   infoSceneBody: {
     color: '#AEB7C7',
@@ -3201,12 +3794,12 @@ const styles = StyleSheet.create({
   simulationCountdownText: {
     color: '#FFFFFF',
     fontSize: 40,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   navDirectiveText: {
     color: '#FFFFFF',
     fontSize: 24,
-    fontWeight: '950',
+    fontWeight: '900',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -3241,7 +3834,7 @@ const styles = StyleSheet.create({
   statValue: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   navActionsRow: {
     flexDirection: 'row',
@@ -3364,9 +3957,48 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     minHeight: 48,
   },
+  ratingSection: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  ratingTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  ratingButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueJourneyButton: {
+    width: '100%',
+    minHeight: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#208AEF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  continueJourneyButtonText: {
+    color: '#8FC7FF',
+    fontSize: 13,
+    fontWeight: '900',
+  },
   // Overlays / Modals
   overlayModal: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(5, 7, 11, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -3487,7 +4119,7 @@ const styles = StyleSheet.create({
   overlayTitle: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   mockMapContainer: {
     width: '100%',
@@ -3554,13 +4186,13 @@ const styles = StyleSheet.create({
   whereAmIStreet: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '950',
+    fontWeight: '900',
     marginTop: 4,
   },
   whereAmIReference: {
     color: '#AEB7C7',
     fontSize: 12,
-    fontWeight: '850',
+    fontWeight: '800',
     textAlign: 'center',
     marginTop: 4,
   },
@@ -3597,7 +4229,7 @@ const styles = StyleSheet.create({
   sosText: {
     color: '#FFFFFF',
     fontSize: 22,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   sosDescription: {
     color: '#FFFFFF',
@@ -3664,7 +4296,7 @@ const styles = StyleSheet.create({
   drawerTitle: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '950',
+    fontWeight: '900',
   },
   drawerButtonsList: {
     gap: 12,
@@ -3706,6 +4338,6 @@ const styles = StyleSheet.create({
   drawerCloseBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '950',
+    fontWeight: '900',
   },
 });

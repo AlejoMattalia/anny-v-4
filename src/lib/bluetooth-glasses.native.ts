@@ -14,6 +14,7 @@ import {
   readPersistentValue,
   writePersistentValue,
 } from './persistent-storage';
+import { clearActiveGlassesNetwork } from './glasses-networks';
 
 const selectedGlassesKey = 'anny-bluetooth-glasses.json';
 const GLASSES_NAME_PREFIX = 'CAECUS';
@@ -107,6 +108,7 @@ export async function pairBluetoothDevice(deviceId: string) {
 }
 
 export async function connectBluetoothDevice(device: AnnyBluetoothDevice) {
+  await clearActiveGlassesNetwork();
   await cancelBluetoothDiscovery();
   const connectedDevice = await RNBluetoothClassic.connectToDevice(device.id);
   const connected = await connectedDevice.isConnected();
@@ -124,6 +126,7 @@ export async function connectBluetoothDevice(device: AnnyBluetoothDevice) {
 }
 
 export async function disconnectBluetoothDevice(deviceId: string) {
+  await clearActiveGlassesNetwork();
   const selected = await getSelectedGlasses();
   if (selected?.id === deviceId) {
     // Removing the preference first prevents the disconnect event from
@@ -183,6 +186,106 @@ export async function writeGlassesCommand(deviceId: string, command: string) {
     ? command
     : `${command}\n`;
   return RNBluetoothClassic.writeToDevice(deviceId, normalizedCommand);
+}
+
+export async function connectGlassesToNetwork(
+  deviceId: string,
+  ssid: string,
+  password: string,
+  timeoutMs = 7000,
+) {
+  const device = await RNBluetoothClassic.getConnectedDevice(deviceId);
+  console.info('[AnnyWiFi] Preparando conexión del lente', {
+    deviceId,
+    ssid,
+    maxAttempts: 3,
+    timeoutMs,
+  });
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const attemptNumber = attempt + 1;
+    console.info('[AnnyWiFi] Enviando comando de conexión', {
+      deviceId,
+      ssid,
+      attempt: attemptNumber,
+    });
+    const connected = await new Promise<boolean>((resolve, reject) => {
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        subscription.remove();
+        resolve(result);
+      };
+      const subscription = device.onDataReceived(({ data }) => {
+        console.info('[AnnyWiFi] Respuesta cruda del lente', {
+          deviceId,
+          ssid,
+          attempt: attemptNumber,
+          data,
+        });
+        const response = data.trim().toLowerCase();
+        if (response.includes('<wifi connected')) {
+          console.info('[AnnyWiFi] El lente confirmó conexión WiFi', {
+            deviceId,
+            ssid,
+            attempt: attemptNumber,
+          });
+          finish(true);
+        } else if (response.includes('<wifi connection timeout')) {
+          console.warn('[AnnyWiFi] El lente informó timeout de WiFi', {
+            deviceId,
+            ssid,
+            attempt: attemptNumber,
+            data,
+          });
+          finish(false);
+        }
+      });
+      const timeout = setTimeout(() => {
+        console.warn('[AnnyWiFi] Sin respuesta del lente dentro del tiempo esperado', {
+          deviceId,
+          ssid,
+          attempt: attemptNumber,
+          timeoutMs,
+        });
+        finish(false);
+      }, timeoutMs);
+
+      void writeGlassesCommand(deviceId, `<connect:${ssid}:${password}`).catch(
+        (error) => {
+          console.error('[AnnyWiFi] Error enviando comando al lente', {
+            deviceId,
+            ssid,
+            attempt: attemptNumber,
+            error,
+          });
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          subscription.remove();
+          reject(error);
+        },
+      );
+    });
+
+    if (connected) {
+      console.info('[AnnyWiFi] Conexión del lente completada', {
+        deviceId,
+        ssid,
+        attempt: attemptNumber,
+      });
+      return true;
+    }
+  }
+
+  console.error('[AnnyWiFi] El lente no confirmó la conexión luego de todos los intentos', {
+    deviceId,
+    ssid,
+    attempts: 3,
+  });
+  return false;
 }
 
 export function subscribeToBluetoothChanges(

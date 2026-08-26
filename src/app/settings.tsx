@@ -314,7 +314,7 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
             <Pressable
-              accessibilityLabel="Administrar dispositivos Bluetooth"
+              accessibilityLabel="Administrar dispositivos"
               onPress={() => router.push('/bluetooth-devices')}
               style={styles.primaryButton}>
               <Text style={styles.primaryButtonText}>Administrar dispositivos</Text>

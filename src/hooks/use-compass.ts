@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Magnetometer } from 'expo-sensors';
-import { Subscription } from 'expo-modules-core';
 
 export function useCompass(isActive: boolean) {
   const [heading, setHeading] = useState<number | null>(null);
@@ -13,7 +12,7 @@ export function useCompass(isActive: boolean) {
     // Set update interval to 150ms for a good balance between responsiveness and performance
     Magnetometer.setUpdateInterval(150);
 
-    let subscription: Subscription | null = null;
+    let subscription: ReturnType<typeof Magnetometer.addListener> | null = null;
 
     try {
       subscription = Magnetometer.addListener((data) => {

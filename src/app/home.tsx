@@ -10,6 +10,11 @@ import {
   getConnectedAnnyGlasses,
   subscribeToBluetoothChanges,
 } from '@/lib/bluetooth-glasses';
+import {
+  getActiveGlassesNetwork,
+  subscribeToActiveGlassesNetworkChanges,
+  type ActiveGlassesNetwork,
+} from '@/lib/glasses-networks';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -22,7 +27,14 @@ const drawerItems = [
   { icon: 'file-document-outline', label: 'Términos de uso', route: '/terms' },
 ] satisfies readonly { icon: MaterialIconName; label: string; route?: string }[];
 
-const homeSections = [
+const homeSections: {
+  accent: string;
+  background: string;
+  icon: string;
+  route?: string;
+  soon?: boolean;
+  title: string;
+}[] = [
   {
     accent: '#208AEF',
     background: 'rgba(32, 138, 239, 0.15)',
@@ -42,7 +54,7 @@ const homeSections = [
     background: 'rgba(77, 170, 87, 0.14)',
     icon: 'help',
     title: 'AYUDA',
-    soon: true,
+    route: '/help',
   },
   {
     accent: '#D79B00',
@@ -69,6 +81,7 @@ function SectionIcon({ name }: { name: string }) {
 export default function HomeScreen() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [connectedGlassesName, setConnectedGlassesName] = useState('');
+  const [connectedNetwork, setConnectedNetwork] = useState<ActiveGlassesNetwork | null>(null);
   const [drawerProgress] = useState(() => new Animated.Value(0));
   const drawerTranslateX = drawerProgress.interpolate({
     inputRange: [0, 1],
@@ -84,9 +97,17 @@ export default function HomeScreen() {
       let active = true;
 
       async function refreshGlassesConnection() {
-        const device = await getConnectedAnnyGlasses();
+        const [device, activeNetwork] = await Promise.all([
+          getConnectedAnnyGlasses(),
+          getActiveGlassesNetwork(),
+        ]);
         if (active) {
           setConnectedGlassesName(device?.name ?? '');
+          setConnectedNetwork(
+            device && activeNetwork?.deviceId === device.id
+              ? activeNetwork
+              : null,
+          );
         }
       }
 
@@ -101,14 +122,25 @@ export default function HomeScreen() {
         // ready. The service also emits once the socket is confirmed.
         void refreshGlassesConnection();
       });
+      const removeNetworkListener = subscribeToActiveGlassesNetworkChanges(() => {
+        void refreshGlassesConnection();
+      });
 
       return () => {
         active = false;
         startupRefreshTimers.forEach(clearTimeout);
         removeBluetoothListeners();
+        removeNetworkListener();
       };
     }, []),
   );
+
+  const glassesHaveInternet = Boolean(connectedGlassesName && connectedNetwork);
+  const glassesStatus = glassesHaveInternet
+    ? 'Conectado'
+    : connectedGlassesName
+      ? 'Falta WiFi o Hotspot'
+      : 'Sin conexión';
 
   const openDrawer = useCallback(() => {
     setDrawerVisible(true);
@@ -211,12 +243,14 @@ export default function HomeScreen() {
           <Pressable
             accessibilityHint="Abre la administración de dispositivos Bluetooth"
             accessibilityLabel={`Anteojos. ${
-              connectedGlassesName
-                ? `Conectados como ${connectedGlassesName}`
-                : 'Sin conexión'
+              glassesHaveInternet
+                ? `Conectados a internet mediante ${connectedNetwork?.type === 'hotspot' ? 'Hotspot' : 'WiFi'}, red ${connectedNetwork?.ssid}`
+                : connectedGlassesName
+                  ? 'Bluetooth conectado. Falta conectar los lentes a WiFi o Hotspot'
+                  : 'Sin conexión Bluetooth'
             }`}
             accessibilityRole="button"
-            onPress={() => router.push('/bluetooth-devices')}
+            onPress={() => router.push(connectedGlassesName ? '/glasses-network' : '/bluetooth-devices')}
             style={styles.connectionPanel}>
             <View style={styles.connectionHeader}>
               <View style={styles.connectionIconWrap}>
@@ -228,17 +262,17 @@ export default function HomeScreen() {
                   <View
                     style={[
                       styles.statusDot,
-                      connectedGlassesName ? null : styles.statusDotDisconnected,
+                      glassesHaveInternet ? null : styles.statusDotDisconnected,
                     ]}
                   />
                   <Text
                     style={[
                       styles.connectionStatusText,
-                      connectedGlassesName
+                      glassesHaveInternet
                         ? null
                         : styles.connectionStatusTextDisconnected,
                     ]}>
-                    {connectedGlassesName ? 'Conectado' : 'Sin conexión'}
+                    {glassesStatus}
                   </Text>
                 </View>
               </View>
@@ -247,9 +281,19 @@ export default function HomeScreen() {
 
             <View style={styles.connectionBody}>
               <View style={styles.networkSelector}>
-                <View style={[styles.networkOption, styles.networkOptionActive]}>
-                  <MaterialCommunityIcons color="#FFFFFF" name="bluetooth" size={16} />
-                  <Text style={[styles.networkText, styles.networkTextActive]}>Bluetooth</Text>
+                <View style={[styles.networkOption, connectedGlassesName ? styles.networkOptionActive : null]}>
+                  <MaterialCommunityIcons color={connectedGlassesName ? '#FFFFFF' : '#7F8A9B'} name="bluetooth" size={16} />
+                  <Text style={[styles.networkText, connectedGlassesName ? styles.networkTextActive : null]}>Bluetooth</Text>
+                </View>
+                <View style={[styles.networkOption, glassesHaveInternet ? styles.networkOptionInternetActive : null]}>
+                  <MaterialCommunityIcons
+                    color={glassesHaveInternet ? '#FFFFFF' : '#FFADB4'}
+                    name={connectedNetwork?.type === 'hotspot' ? 'access-point' : 'wifi'}
+                    size={16}
+                  />
+                  <Text style={[styles.networkText, glassesHaveInternet ? styles.networkTextActive : styles.networkTextMissing]}>
+                    {glassesHaveInternet ? (connectedNetwork?.type === 'hotspot' ? 'Hotspot' : 'WiFi') : 'Sin internet'}
+                  </Text>
                 </View>
               </View>
 
@@ -518,7 +562,7 @@ const styles = StyleSheet.create({
   },
   networkSelector: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1D2633',
@@ -528,7 +572,7 @@ const styles = StyleSheet.create({
   },
   networkOption: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -538,6 +582,9 @@ const styles = StyleSheet.create({
   networkOptionActive: {
     backgroundColor: '#5A2371',
   },
+  networkOptionInternetActive: {
+    backgroundColor: '#315C43',
+  },
   networkText: {
     color: '#7F8A9B',
     fontSize: 11,
@@ -545,6 +592,9 @@ const styles = StyleSheet.create({
   },
   networkTextActive: {
     color: '#FFFFFF',
+  },
+  networkTextMissing: {
+    color: '#FFADB4',
   },
   connectionDeviceBox: {
     flex: 1.4,

@@ -1,8 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
@@ -62,9 +63,9 @@ const travelModes: {
   label: string;
   icon: 'bus' | 'car' | 'walk';
 }[] = [
-  { value: 'transit', label: 'Transporte', icon: 'bus' },
+  { value: 'walking', label: 'Caminando', icon: 'walk' },
+  { value: 'transit', label: 'Colectivo', icon: 'bus' },
   { value: 'driving', label: 'Auto', icon: 'car' },
-  { value: 'walking', label: 'A pie', icon: 'walk' },
 ];
 
 export default function PlanTripScreen() {
@@ -83,6 +84,7 @@ export default function PlanTripScreen() {
 
   const [isSavingJourney, setIsSavingJourney] = useState(false);
   const [journeyTitle, setJourneyTitle] = useState('');
+  const lastResultsAnnouncement = useRef('');
 
   // Load permissions, user coordinates, and saved locations
   useEffect(() => {
@@ -180,7 +182,7 @@ export default function PlanTripScreen() {
     }
   };
 
-  const handleStartTrip = () => {
+  const handleStartTrip = (tripMode: 'start' | 'simulate') => {
     if (!origin || !destination) return;
     router.push({
       pathname: '/start-trip',
@@ -194,15 +196,14 @@ export default function PlanTripScreen() {
         destLat: destination.latitude.toString(),
         destLng: destination.longitude.toString(),
         travelMode,
-        mode: isSimulationMode ? 'simulate' : 'start',
-        autoStartSimulation: isSimulationMode ? '1' : '0',
+        mode: tripMode,
       },
     });
   };
 
-  const handleSelectTravelMode = (mode: TravelMode, label: string) => {
+  const handleSelectTravelMode = (mode: TravelMode, label: string, index: number) => {
     setTravelMode(mode);
-    void speak(`Modo de viaje: ${label}.`);
+    void speak(`Modo de viaje seleccionado: ${label}. Opción ${index + 1} de ${travelModes.length}.`);
   };
 
   const handleOpenSaveJourney = () => {
@@ -275,6 +276,28 @@ export default function PlanTripScreen() {
       loc.address.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const visibleLocations = useMemo(
+    () => [
+      ...(activeSearch === 'origin' && gpsLocation && searchQuery.trim() === ''
+        ? [{ ...gpsLocation, isSaved: false }]
+        : []),
+      ...filteredSaved.map((item) => ({ ...item, isSaved: true })),
+      ...apiResults.map((item) => ({ ...item, isSaved: false })),
+    ],
+    [activeSearch, apiResults, filteredSaved, gpsLocation, searchQuery],
+  );
+
+  useEffect(() => {
+    if (activeSearch === null || isLoading) return;
+
+    const context = searchQuery.trim() === '' ? 'ubicaciones disponibles' : 'resultados encontrados';
+    const announcement = `${visibleLocations.length} ${context}.`;
+    if (lastResultsAnnouncement.current === announcement) return;
+
+    lastResultsAnnouncement.current = announcement;
+    AccessibilityInfo.announceForAccessibility(announcement);
+  }, [activeSearch, isLoading, searchQuery, visibleLocations.length]);
+
   return (
     <View style={styles.screen}>
       <View style={styles.topGlow} />
@@ -287,13 +310,16 @@ export default function PlanTripScreen() {
             <View style={styles.header}>
               <Pressable
                 accessibilityLabel="Volver a sección de viajes"
+                accessibilityRole="button"
                 onPress={() => router.replace('/travel')}
                 style={styles.backButton}
               >
                 <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
               </Pressable>
               <View style={styles.headerText}>
-                <Text style={styles.title}>{isSimulationMode ? 'Simular viaje' : 'Planificar viaje'}</Text>
+                <Text accessibilityRole="header" style={styles.title}>
+                  {isSimulationMode ? 'Simular viaje' : 'Planificar viaje'}
+                </Text>
               </View>
               <View style={styles.headerBadge}>
                 <MaterialCommunityIcons color="#FFFFFF" name="map-marker-distance" size={21} />
@@ -306,9 +332,11 @@ export default function PlanTripScreen() {
                 <Text style={styles.fieldLabel}>Punto de partida (Origen)</Text>
                 <View style={styles.inputContainer}>
                   <Pressable
+                    accessibilityHint="Abre la búsqueda de un nuevo punto de partida"
                     accessibilityLabel={
                       origin ? `Origen: ${origin.name}. Presiona para cambiar.` : 'Establecer punto de partida'
                     }
+                    accessibilityRole="button"
                     onPress={() => handleOpenSearch('origin')}
                     style={styles.inputPressable}
                   >
@@ -327,6 +355,7 @@ export default function PlanTripScreen() {
                   {origin && (
                     <Pressable
                       accessibilityLabel="Quitar origen"
+                      accessibilityRole="button"
                       onPress={() => handleClearLocation('origin')}
                       style={styles.clearButton}
                     >
@@ -339,9 +368,11 @@ export default function PlanTripScreen() {
                 <Text style={styles.fieldLabel}>Destino (Llegada)</Text>
                 <View style={styles.inputContainer}>
                   <Pressable
+                    accessibilityHint="Abre la búsqueda para escribir o elegir un destino"
                     accessibilityLabel={
                       destination ? `Destino: ${destination.name}. Presiona para cambiar.` : 'Establecer destino'
                     }
+                    accessibilityRole="button"
                     onPress={() => handleOpenSearch('destination')}
                     style={styles.inputPressable}
                   >
@@ -360,6 +391,7 @@ export default function PlanTripScreen() {
                   {destination && (
                     <Pressable
                       accessibilityLabel="Quitar destino"
+                      accessibilityRole="button"
                       onPress={() => handleClearLocation('destination')}
                       style={styles.clearButton}
                     >
@@ -368,17 +400,18 @@ export default function PlanTripScreen() {
                   )}
                 </View>
 
-                <Text style={styles.fieldLabel}>Cómo querés viajar</Text>
+                <Text style={styles.fieldLabel}>Cómo querés viajar · {travelModes.length} opciones</Text>
                 <View accessibilityRole="radiogroup" style={styles.travelModeRow}>
-                  {travelModes.map((mode) => {
+                  {travelModes.map((mode, index) => {
                     const isSelected = travelMode === mode.value;
                     return (
                       <Pressable
                         accessibilityLabel={`Viajar en ${mode.label}`}
+                        accessibilityHint={`Opción ${index + 1} de ${travelModes.length}`}
                         accessibilityRole="radio"
                         accessibilityState={{ checked: isSelected }}
                         key={mode.value}
-                        onPress={() => handleSelectTravelMode(mode.value, mode.label)}
+                        onPress={() => handleSelectTravelMode(mode.value, mode.label, index)}
                         style={[styles.travelModeButton, isSelected && styles.travelModeButtonSelected]}
                       >
                         <Ionicons
@@ -399,6 +432,8 @@ export default function PlanTripScreen() {
               <View style={styles.actionButtonsRow}>
                 <Pressable
                   accessibilityLabel="Guardar este viaje en favoritos"
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !origin || !destination }}
                   disabled={!origin || !destination}
                   onPress={handleOpenSaveJourney}
                   style={[styles.actionButton, styles.saveButton, (!origin || !destination) && styles.actionButtonDisabled]}
@@ -408,19 +443,34 @@ export default function PlanTripScreen() {
                 </Pressable>
 
                 <Pressable
-                  accessibilityLabel={
-                    isSimulationMode ? 'Simular el viaje seleccionado' : 'Iniciar navegación de viaje planificado'
-                  }
+                  accessibilityHint="Calcula y muestra directamente las rutas disponibles"
+                  accessibilityLabel="Iniciar navegación del viaje planificado"
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !origin || !destination }}
                   disabled={!origin || !destination}
-                  onPress={handleStartTrip}
+                  onPress={() => handleStartTrip('start')}
                   style={[styles.actionButton, styles.startButton, (!origin || !destination) && styles.actionButtonDisabled]}
                 >
                   <MaterialCommunityIcons color="#FFFFFF" name="navigation-variant" size={18} />
-                  <Text style={styles.actionButtonText}>
-                    {isSimulationMode ? 'Simular viaje' : 'Iniciar viaje'}
-                  </Text>
+                  <Text style={styles.actionButtonText}>Iniciar</Text>
                 </Pressable>
               </View>
+
+              <Pressable
+                accessibilityHint="Calcula y muestra directamente las rutas antes de reproducir la demostración"
+                accessibilityLabel="Simular el viaje planificado"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !origin || !destination }}
+                disabled={!origin || !destination}
+                onPress={() => handleStartTrip('simulate')}
+                style={[
+                  styles.simulateButton,
+                  (!origin || !destination) && styles.actionButtonDisabled,
+                ]}
+              >
+                <MaterialCommunityIcons color="#FFFFFF" name="map-clock-outline" size={18} />
+                <Text style={styles.actionButtonText}>Simular</Text>
+              </Pressable>
             </View>
           </View>
         ) : (
@@ -429,12 +479,16 @@ export default function PlanTripScreen() {
             <View style={styles.searchHeader}>
               <Pressable
                 accessibilityLabel="Cancelar búsqueda"
+                accessibilityRole="button"
                 onPress={() => setActiveSearch(null)}
                 style={styles.backButton}
               >
                 <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
               </Pressable>
               <TextInput
+                accessibilityHint="Escribí al menos tres letras para buscar"
+                accessibilityLabel={activeSearch === 'origin' ? 'Buscar origen' : 'Buscar destino'}
+                accessibilityRole="search"
                 autoFocus
                 placeholder={activeSearch === 'origin' ? 'Buscar origen...' : 'Buscar destino...'}
                 placeholderTextColor="#596474"
@@ -449,6 +503,8 @@ export default function PlanTripScreen() {
               />
               {searchQuery.length > 0 && (
                 <Pressable
+                  accessibilityLabel="Limpiar búsqueda"
+                  accessibilityRole="button"
                   onPress={() => {
                     setSearchQuery('');
                     setApiResults([]);
@@ -468,20 +524,16 @@ export default function PlanTripScreen() {
             )}
 
             <FlatList
-              data={[
-                // Inject current location option if searching origin and GPS is ready
-                ...(activeSearch === 'origin' && gpsLocation && searchQuery.trim() === '' ? [gpsLocation] : []),
-                // Saved Locations
-                ...filteredSaved.map((item) => ({ ...item, isSaved: true })),
-                // API Results
-                ...apiResults.map((item) => ({ ...item, isSaved: false })),
-              ]}
+              accessibilityLabel={`${visibleLocations.length} opciones disponibles`}
+              data={visibleLocations}
               keyExtractor={(item, index) => `${item.id}-${index}`}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.listContainer}
               renderItem={({ item }) => (
                 <Pressable
+                  accessibilityHint="Selecciona esta ubicación"
                   accessibilityLabel={`${item.name}. ${item.address}`}
+                  accessibilityRole="button"
                   onPress={() => handleSelectLocation(item)}
                   style={styles.listItem}
                 >
@@ -565,10 +617,20 @@ export default function PlanTripScreen() {
                     style={styles.modalInput}
                   />
                   <View style={styles.modalButtons}>
-                    <Pressable onPress={() => setIsSavingJourney(false)} style={[styles.modalBtn, styles.modalBtnCancel]}>
+                    <Pressable
+                      accessibilityLabel="Cancelar guardado del viaje"
+                      accessibilityRole="button"
+                      onPress={() => setIsSavingJourney(false)}
+                      style={[styles.modalBtn, styles.modalBtnCancel]}
+                    >
                       <Text style={styles.modalBtnCancelText}>Cancelar</Text>
                     </Pressable>
-                    <Pressable onPress={handleConfirmSaveJourney} style={[styles.modalBtn, styles.modalBtnConfirm]}>
+                    <Pressable
+                      accessibilityLabel="Confirmar guardado del viaje"
+                      accessibilityRole="button"
+                      onPress={handleConfirmSaveJourney}
+                      style={[styles.modalBtn, styles.modalBtnConfirm]}
+                    >
                       <Text style={styles.modalBtnConfirmText}>Guardar</Text>
                     </Pressable>
                   </View>
@@ -751,6 +813,19 @@ const styles = StyleSheet.create({
   },
   startButton: {
     backgroundColor: '#208AEF',
+  },
+  simulateButton: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#D79B00',
+    borderRadius: 25,
+    backgroundColor: '#8A6200',
+    elevation: 2,
   },
   actionButtonDisabled: {
     backgroundColor: '#161D26',

@@ -66,6 +66,14 @@ export async function writeGlassesCommand(
   return false;
 }
 
+export async function connectGlassesToNetwork(
+  _deviceId: string,
+  _ssid: string,
+  _password: string,
+) {
+  return false;
+}
+
 export function subscribeToBluetoothChanges(_listener: () => void) {
   return () => undefined;
 }

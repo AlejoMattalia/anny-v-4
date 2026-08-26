@@ -19,6 +19,23 @@ function readEnvValue(filePath, key) {
 
 const childEnvironment = { ...process.env };
 
+if (process.platform === 'linux') {
+  const configuredJavaHome = childEnvironment.JAVA_HOME;
+  const configuredCompiler = configuredJavaHome
+    ? path.join(configuredJavaHome, 'bin', 'javac')
+    : '';
+  const fallbackJavaHome = '/usr/lib/jvm/java-17-openjdk-amd64';
+  const fallbackCompiler = path.join(fallbackJavaHome, 'bin', 'javac');
+
+  if (
+    (!configuredCompiler || !fs.existsSync(configuredCompiler)) &&
+    fs.existsSync(fallbackCompiler)
+  ) {
+    childEnvironment.JAVA_HOME = fallbackJavaHome;
+    childEnvironment.PATH = `${path.join(fallbackJavaHome, 'bin')}${path.delimiter}${childEnvironment.PATH || ''}`;
+  }
+}
+
 if (!childEnvironment.EXPO_PUBLIC_GOOGLE_MAP_KEY) {
   const legacyEnvPath = path.resolve(process.cwd(), '../anny-app-v3/.env');
   const legacyGoogleKey = readEnvValue(legacyEnvPath, 'GOOGLE_MAP_KEY');

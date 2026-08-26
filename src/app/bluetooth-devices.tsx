@@ -28,6 +28,7 @@ import {
   requestBluetoothPermissions,
   subscribeToBluetoothChanges,
 } from '@/lib/bluetooth-glasses';
+import { connectGlassesToNearbySavedNetwork } from '@/lib/automatic-glasses-network';
 import { speak } from '@/lib/voice';
 
 function mergeDevices(
@@ -187,7 +188,17 @@ export default function BluetoothDevicesScreen() {
       await speak(`Conectando con ${device.isGlasses ? 'Lentes Anny' : device.name}.`);
       const connected = await connectBluetoothDevice(device);
       setDevices((current) => mergeDevices(current, [connected]));
-      await speak('Lentes Anny conectados correctamente.');
+      try {
+        const networkResult = await connectGlassesToNearbySavedNetwork(connected);
+        await speak(
+          networkResult.status === 'connected'
+            ? `Lentes Anny conectados a ${networkResult.network.ssid}.`
+            : 'Lentes Anny conectados por Bluetooth. No encontré una red guardada cercana.',
+        );
+      } catch (networkError) {
+        console.warn('[AnnyWiFi] Falló la conexión automática a una red guardada', networkError);
+        await speak('Lentes Anny conectados por Bluetooth. No pude buscar las redes WiFi cercanas.');
+      }
     } catch (connectionError) {
       const message = getBluetoothErrorMessage(connectionError);
       setError(message);
@@ -286,37 +297,46 @@ export default function BluetoothDevicesScreen() {
         {busy ? (
           <ActivityIndicator color="#B18CFF" />
         ) : device.isGlasses ? (
-          <Pressable
-            accessibilityLabel={
-              device.connected
-                ? 'Desconectar Lentes Anny'
-                : device.bonded
-                  ? 'Conectar Lentes Anny'
-                  : 'Vincular Lentes Anny'
-            }
-            accessibilityRole="button"
-            onPress={() => {
-              if (device.connected) {
-                void disconnect(device);
-              } else if (device.bonded) {
-                void connect(device);
-              } else {
-                void pairAndConnect(device);
-              }
-            }}
-            style={[
-              styles.deviceAction,
-              device.connected ? styles.disconnectAction : null,
-            ]}
-          >
-            <Text style={styles.deviceActionText}>
-              {device.connected
-                ? 'Desconectar'
-                : device.bonded
-                  ? 'Conectar'
-                  : 'Vincular'}
-            </Text>
-          </Pressable>
+          <View style={styles.deviceActions}>
+            {device.connected ? (
+              <Pressable
+                accessibilityLabel="Abrir lente"
+                accessibilityRole="button"
+                onPress={() => router.push('/glasses-network')}
+                style={styles.deviceAction}
+              >
+                <Text style={styles.deviceActionText}>Abrir lente</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityLabel={device.bonded ? 'Conectar Lentes Anny' : 'Vincular Lentes Anny'}
+                accessibilityRole="button"
+                onPress={() => {
+                  if (device.bonded) {
+                    void connect(device);
+                  } else {
+                    void pairAndConnect(device);
+                  }
+                }}
+                style={styles.deviceAction}
+              >
+                <Text style={styles.deviceActionText}>{device.bonded ? 'Conectar' : 'Vincular'}</Text>
+              </Pressable>
+            )}
+            {device.connected ? (
+              <Pressable
+                accessibilityLabel="Desconectar Lentes Anny"
+                accessibilityRole="button"
+                onPress={() => void disconnect(device)}
+                style={[styles.deviceAction, styles.disconnectAction]}
+              >
+                <MaterialCommunityIcons color="#FFADB4" name="bluetooth-off" size={18} />
+                <Text style={[styles.deviceActionText, styles.disconnectActionText]}>
+                  Desconectar
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : (
           <MaterialCommunityIcons
             color="#596474"
@@ -341,7 +361,7 @@ export default function BluetoothDevicesScreen() {
             <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
-            <Text style={styles.title}>Dispositivos Bluetooth</Text>
+            <Text style={styles.title}>Dispositivos</Text>
             <Text style={styles.subtitle}>Conexión de Lentes Anny</Text>
           </View>
           <View style={styles.headerBadge}>
@@ -781,13 +801,23 @@ const styles = StyleSheet.create({
   },
   deviceAction: {
     minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
     borderRadius: 8,
     backgroundColor: '#6A29FF',
     paddingHorizontal: 12,
   },
+  deviceActions: {
+    alignItems: 'stretch',
+    gap: 6,
+  },
   disconnectAction: {
     backgroundColor: '#3A2430',
+  },
+  disconnectActionText: {
+    color: '#FFADB4',
   },
   deviceActionText: {
     color: '#FFFFFF',

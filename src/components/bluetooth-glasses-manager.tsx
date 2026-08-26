@@ -15,16 +15,19 @@ import {
   hasRememberedGlasses,
   subscribeToBluetoothChanges,
 } from '@/lib/bluetooth-glasses';
+import { connectGlassesToNearbySavedNetwork } from '@/lib/automatic-glasses-network';
 import { speak } from '@/lib/voice';
 
 const RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000];
-type ConnectionNotice = 'hidden' | 'connecting' | 'connected';
+const CONNECTING_NOTICE_TIMEOUT_MS = 8_000;
+type ConnectionNotice = 'hidden' | 'connecting' | 'connecting-wifi' | 'connected';
 
 export function BluetoothGlassesManager() {
   const [connectionNotice, setConnectionNotice] =
     useState<ConnectionNotice>('hidden');
   const appIsActive = useRef(AppState.currentState === 'active');
   const connected = useRef(false);
+  const [connectedNetworkName, setConnectedNetworkName] = useState('');
   const retryIndex = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,8 +53,9 @@ export function BluetoothGlassesManager() {
       }
     }
 
-    function showConnectedNotice() {
+    function showConnectedNotice(networkName = '') {
       clearNoticeTimer();
+      setConnectedNetworkName(networkName);
       setConnectionNotice('connected');
       noticeTimer.current = setTimeout(() => {
         noticeTimer.current = null;
@@ -59,6 +63,17 @@ export function BluetoothGlassesManager() {
           setConnectionNotice('hidden');
         }
       }, 2_000);
+    }
+
+    function showConnectingNotice() {
+      clearNoticeTimer();
+      setConnectionNotice('connecting');
+      noticeTimer.current = setTimeout(() => {
+        noticeTimer.current = null;
+        if (mounted) {
+          setConnectionNotice('hidden');
+        }
+      }, CONNECTING_NOTICE_TIMEOUT_MS);
     }
 
     function scheduleRetry() {
@@ -90,32 +105,53 @@ export function BluetoothGlassesManager() {
           return;
         }
 
-        clearNoticeTimer();
-        setConnectionNotice('connecting');
+        showConnectingNotice();
         const glasses = await ensureRememberedGlassesConnected();
         if (!mounted) return;
 
         if (glasses) {
+          clearNoticeTimer();
           clearRetry();
           retryIndex.current = 0;
-          showConnectedNotice();
-          if (!connected.current) {
-            connected.current = true;
+          const isNewBluetoothConnection = !connected.current;
+          connected.current = true;
+          setConnectionNotice('connecting-wifi');
+
+          let networkName = '';
+          try {
+            const networkResult = await connectGlassesToNearbySavedNetwork(glasses);
+            if (!mounted) return;
+            if (networkResult.status === 'connected') {
+              networkName = networkResult.network.ssid;
+            }
+          } catch (networkError) {
+            console.warn('[AnnyWiFi] No se pudo completar la reconexión automática', networkError);
+          }
+
+          if (!mounted) return;
+          showConnectedNotice(networkName);
+          if (isNewBluetoothConnection) {
             console.info(
               `[AnnyBluetooth] Conectado automáticamente a ${glasses.name} (${glasses.id})`,
             );
-            await speak('Lentes Anny conectados.');
+            await speak(
+              networkName
+                ? `Lentes conectados por Bluetooth y a la red ${networkName}.`
+                : 'Bluetooth de los lentes conectado. No encontré una red guardada cercana.',
+            );
           }
           return;
         }
 
         connected.current = false;
-        setConnectionNotice('connecting');
+        clearNoticeTimer();
+        setConnectionNotice('hidden');
         scheduleRetry();
       } catch (error) {
         if (!mounted) return;
         connected.current = false;
-        setConnectionNotice('connecting');
+        clearNoticeTimer();
+        setConnectionNotice('hidden');
         console.warn(
           `[AnnyBluetooth] Reconexión pendiente: ${getBluetoothErrorMessage(error)}`,
         );
@@ -189,13 +225,21 @@ export function BluetoothGlassesManager() {
         <View style={styles.noticeText}>
           <Text style={styles.noticeTitle}>
             {connectionCompleted
-              ? 'Lentes Anny conectados'
-              : 'Conectando lentes Anny…'}
+              ? connectedNetworkName
+                ? 'Lentes conectados'
+                : 'Bluetooth conectado'
+              : connectionNotice === 'connecting-wifi'
+                ? 'Buscando una red guardada…'
+                : 'Conectando lentes Anny…'}
           </Text>
           <Text style={styles.noticeSubtitle}>
             {connectionCompleted
-              ? 'La conexión Bluetooth está lista.'
-              : 'Mantenelos encendidos y cerca.'}
+              ? connectedNetworkName
+                ? `Conectados a ${connectedNetworkName}.`
+                : 'No se encontró una red guardada cercana.'
+              : connectionNotice === 'connecting-wifi'
+                ? 'Revisando las redes WiFi cercanas.'
+                : 'Mantenelos encendidos y cerca.'}
           </Text>
         </View>
       </View>

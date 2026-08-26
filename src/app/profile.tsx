@@ -30,7 +30,7 @@ type ProfileMenuItem = {
 
 const accountItems: ProfileMenuItem[] = [
   { icon: 'account-outline', label: 'Información personal', action: 'edit' },
-  { icon: 'bluetooth', label: 'Dispositivos Bluetooth', route: '/bluetooth-devices' as Href },
+  { icon: 'bluetooth', label: 'Dispositivos', route: '/bluetooth-devices' as Href },
   { icon: 'microphone-message', label: 'Comandos', soon: true },
   { icon: 'wallet-outline', label: 'Mi billetera', soon: true },
   { icon: 'bell-outline', label: 'Notificaciones', route: '/notifications' as Href },
