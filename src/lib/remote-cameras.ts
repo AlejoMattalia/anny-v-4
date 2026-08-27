@@ -83,7 +83,7 @@ export async function getRemoteCameras() {
 }
 
 export async function claimRemoteCamera(activationCode: string) {
-  return streamingRequest<{ camera: RemoteCamera }>('/cameras/claim', {
+  return streamingRequest<{ camera: RemoteCamera; deviceSecret: string }>('/cameras/claim', {
     method: 'POST',
     body: JSON.stringify({ activationCode: activationCode.trim().toUpperCase() }),
   });

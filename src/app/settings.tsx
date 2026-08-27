@@ -12,7 +12,6 @@ import { checkVoicePermissions, requestVoicePermissions, speak } from '@/lib/voi
 import { useCompass } from '@/hooks/use-compass';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
-type GlassesProtocol = 'wifi' | 'bluetooth';
 
 const VOICE_RATE_MIN = 0.5;
 const VOICE_RATE_MAX = 1.7;
@@ -47,7 +46,6 @@ export default function SettingsScreen() {
   const [micPermission, setMicPermission] = useState(false);
   const [contactsPermission, setContactsPermission] = useState(false);
   const [compassActive, setCompassActive] = useState(false);
-  const [glassesProtocol, setGlassesProtocol] = useState<GlassesProtocol>('bluetooth');
   const [voiceRate, setVoiceRate] = useState(1);
   const [simulationSpeed, setSimulationSpeed] = useState(1);
   const [voiceTrackWidth, setVoiceTrackWidth] = useState(1);
@@ -76,7 +74,6 @@ export default function SettingsScreen() {
       try {
         const saved = await loadSettings();
         setCompassActive(saved.compassActive);
-        setGlassesProtocol(saved.glassesProtocol);
         setVoiceRate(clamp(saved.voiceRate, VOICE_RATE_MIN, VOICE_RATE_MAX));
         setSimulationSpeed(
           clamp(saved.simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX),
@@ -141,12 +138,6 @@ export default function SettingsScreen() {
     } else {
       void speak('Brújula desactivada.');
     }
-  }
-
-  async function setProtocol(protocol: GlassesProtocol) {
-    setGlassesProtocol(protocol);
-    await saveSettings({ glassesProtocol: protocol });
-    void speak(`Protocolo de anteojos: ${protocol === 'wifi' ? 'WiFi' : 'Bluetooth'}.`);
   }
 
   async function commitVoiceRateSetting(rate: number) {
@@ -293,34 +284,6 @@ export default function SettingsScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Conexión a anteojos</Text>
-            <View style={styles.protocolControl}>
-              <Pressable
-                accessibilityLabel="Usar WiFi"
-                onPress={() => setProtocol('wifi')}
-                style={[styles.protocolButton, glassesProtocol === 'wifi' ? styles.protocolButtonActive : null]}>
-                <MaterialCommunityIcons color={glassesProtocol === 'wifi' ? '#FFFFFF' : '#7F8A9B'} name="wifi" size={18} />
-                <Text style={[styles.protocolText, glassesProtocol === 'wifi' ? styles.protocolTextActive : null]}>WiFi</Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Usar Bluetooth"
-                onPress={() => setProtocol('bluetooth')}
-                style={[styles.protocolButton, glassesProtocol === 'bluetooth' ? styles.protocolButtonActive : null]}>
-                <MaterialCommunityIcons color={glassesProtocol === 'bluetooth' ? '#FFFFFF' : '#7F8A9B'} name="bluetooth" size={18} />
-                <Text style={[styles.protocolText, glassesProtocol === 'bluetooth' ? styles.protocolTextActive : null]}>
-                  Bluetooth
-                </Text>
-              </Pressable>
-            </View>
-            <Pressable
-              accessibilityLabel="Administrar dispositivos"
-              onPress={() => router.push('/bluetooth-devices')}
-              style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Administrar dispositivos</Text>
-            </Pressable>
-          </View>
-
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Permisos</Text>
             {renderPermissionRow({

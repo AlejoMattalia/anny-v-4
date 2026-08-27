@@ -33,9 +33,7 @@ const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
   '/contacts':
     'Contactos. Podés recorrer tu agenda, escuchar los datos de un contacto, marcarlo como favorito o llamarlo.',
   '/bluetooth-devices':
-    'Dispositivos. Acá podés activar Bluetooth, buscar Lentes Anny, conectarlos y abrir el lente.',
-  '/glasses-network':
-    'Lentes Anny. El Bluetooth ya está conectado. Elegí Hotspot o WiFi para conectar los lentes a internet.',
+    'Dispositivos. Acá podés conectar el lente con cámara ESP32 usando su código de activación y configurar el WiFi.',
   '/settings':
     'Configuración. Podés revisar permisos, conexión de anteojos, brújula, velocidad de voz y velocidad de simulación.',
   '/profile':

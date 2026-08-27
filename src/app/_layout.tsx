@@ -3,7 +3,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import { BluetoothGlassesManager } from '@/components/bluetooth-glasses-manager';
 import { ScreenVoiceAnnouncer } from '@/components/screen-voice-announcer';
 import { requestVoicePermissions, speak } from '@/lib/voice';
 
@@ -27,7 +26,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={DarkTheme}>
       <AnimatedSplashOverlay />
-      <BluetoothGlassesManager />
+      {/* Lente Bluetooth anterior deshabilitado: se utiliza sólo el lente ESP32. */}
       <ScreenVoiceAnnouncer />
       <Stack
         screenOptions={{

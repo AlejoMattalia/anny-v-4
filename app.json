@@ -33,6 +33,13 @@
     "plugins": [
       "expo-router",
       [
+        "react-native-ble-plx",
+        {
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Anny necesita Bluetooth para configurar tus lentes."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
