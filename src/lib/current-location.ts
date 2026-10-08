@@ -10,7 +10,8 @@ export interface CurrentLocation {
 const MAX_CACHED_LOCATION_AGE_MS = 2 * 60 * 1000;
 const MAX_CACHED_LOCATION_ACCURACY_METERS = 250;
 
-let pendingLocation: Promise<CurrentLocation> | null = null;
+let cachedLocation: CurrentLocation | null = null;
+const pendingLocations = new Map<string, Promise<CurrentLocation>>();
 
 function toCurrentLocation(location: Location.LocationObject): CurrentLocation {
   return {
@@ -21,7 +22,11 @@ function toCurrentLocation(location: Location.LocationObject): CurrentLocation {
   };
 }
 
-async function locate(allowCached: boolean): Promise<CurrentLocation> {
+async function locate(
+  allowCached: boolean,
+  maxCachedAgeMs: number,
+  maxCachedAccuracyMeters: number,
+): Promise<CurrentLocation> {
   const permission = await Location.requestForegroundPermissionsAsync();
   if (permission.status !== Location.PermissionStatus.GRANTED) {
     throw new Error(
@@ -35,13 +40,22 @@ async function locate(allowCached: boolean): Promise<CurrentLocation> {
   }
 
   if (allowCached) {
+    if (cachedLocation &&
+        Date.now() - cachedLocation.timestamp >= 0 &&
+        Date.now() - cachedLocation.timestamp <= maxCachedAgeMs &&
+        cachedLocation.accuracy != null &&
+        cachedLocation.accuracy <= maxCachedAccuracyMeters) {
+      return cachedLocation;
+    }
+
     const cached = await Location.getLastKnownPositionAsync({
-      maxAge: MAX_CACHED_LOCATION_AGE_MS,
-      requiredAccuracy: MAX_CACHED_LOCATION_ACCURACY_METERS,
+      maxAge: maxCachedAgeMs,
+      requiredAccuracy: maxCachedAccuracyMeters,
     });
 
     if (cached) {
-      return toCurrentLocation(cached);
+      cachedLocation = toCurrentLocation(cached);
+      return cachedLocation;
     }
   }
 
@@ -50,21 +64,38 @@ async function locate(allowCached: boolean): Promise<CurrentLocation> {
     mayShowUserSettingsDialog: true,
   });
 
-  return toCurrentLocation(current);
+  cachedLocation = toCurrentLocation(current);
+  return cachedLocation;
+}
+
+export async function warmCurrentLocation() {
+  try {
+    const permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status === Location.PermissionStatus.GRANTED) {
+      await getCurrentLocation({ allowCached: false });
+    }
+  } catch {
+    // La app sigue funcionando aunque la ubicación no esté disponible al abrirla.
+  }
 }
 
 export async function getCurrentLocation(options?: {
   allowCached?: boolean;
+  maxCachedAgeMs?: number;
+  maxCachedAccuracyMeters?: number;
 }): Promise<CurrentLocation> {
-  if (pendingLocation) {
-    return pendingLocation;
-  }
+  const allowCached = options?.allowCached ?? true;
+  const maxCachedAgeMs = options?.maxCachedAgeMs ?? MAX_CACHED_LOCATION_AGE_MS;
+  const maxCachedAccuracyMeters = options?.maxCachedAccuracyMeters ?? MAX_CACHED_LOCATION_ACCURACY_METERS;
+  const key = allowCached ? `${maxCachedAgeMs}:${maxCachedAccuracyMeters}` : 'fresh';
+  const pending = pendingLocations.get(key);
+  if (pending) return pending;
 
-  pendingLocation = locate(options?.allowCached ?? true).finally(() => {
-    pendingLocation = null;
+  const request = locate(allowCached, maxCachedAgeMs, maxCachedAccuracyMeters).finally(() => {
+    pendingLocations.delete(key);
   });
-
-  return pendingLocation;
+  pendingLocations.set(key, request);
+  return request;
 }
 
 export function formatGeocodedAddress(
@@ -89,13 +120,15 @@ export function formatGeocodedAddress(
 export async function reverseGeocodeLocation(
   location: Pick<CurrentLocation, 'latitude' | 'longitude'>,
 ) {
-  const [address] = await Location.reverseGeocodeAsync(location);
-  if (!address) {
-    return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
-  }
+  const coordinates = `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+  try {
+    const [address] = await Location.reverseGeocodeAsync(location);
+    if (!address) {
+      return coordinates;
+    }
 
-  return (
-    formatGeocodedAddress(address) ||
-    `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
-  );
+    return formatGeocodedAddress(address) || coordinates;
+  } catch {
+    return coordinates;
+  }
 }

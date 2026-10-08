@@ -89,7 +89,8 @@
           "image": "./assets/images/logo-white.png",
           "imageWidth": 160
         }
-      ]
+      ],
+      "./plugins/with-wifi-lens"
     ],
     "experiments": {
       "typedRoutes": true,

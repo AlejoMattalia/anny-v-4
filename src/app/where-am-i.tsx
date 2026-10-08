@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -23,30 +23,39 @@ export default function WhereAmIScreen() {
   const [address, setAddress] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const locationRequestId = useRef(0);
 
   const locate = useCallback(async (forceRefresh = false) => {
+    const requestId = ++locationRequestId.current;
     setIsLoading(true);
     setError('');
-    await speak('Buscando tu ubicación actual.');
+    void speak('Buscando tu ubicación actual.');
 
     try {
       const current = await getCurrentLocation({
         allowCached: !forceRefresh,
       });
+      if (requestId !== locationRequestId.current) return;
       setLocation(current);
+      setAddress('Buscando dirección…');
+      setIsLoading(false);
 
       const currentAddress = await reverseGeocodeLocation(current);
+      if (requestId !== locationRequestId.current) return;
       setAddress(currentAddress);
-      await speak(`Estás en ${currentAddress}`);
+      void speak(`Estás en ${currentAddress}`);
     } catch (locationError) {
+      if (requestId !== locationRequestId.current) return;
       const message =
         locationError instanceof Error
           ? locationError.message
           : 'No se pudo obtener tu ubicación.';
       setError(message);
-      await speak(message);
+      void speak(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === locationRequestId.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -55,7 +64,10 @@ export default function WhereAmIScreen() {
       void locate();
     }, 0);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      locationRequestId.current += 1;
+    };
   }, [locate]);
 
   const openSettings = () => {
@@ -71,7 +83,7 @@ export default function WhereAmIScreen() {
             accessibilityLabel="Volver a Explorar"
             onPress={() => router.back()}
             style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <Text style={styles.title}>Dónde estoy</Text>
           <View style={styles.headerBadge}>
@@ -149,7 +161,7 @@ export default function WhereAmIScreen() {
                 styles.secondaryButton,
                 pressed ? styles.buttonPressed : null,
               ]}>
-              <MaterialCommunityIcons color="#B18CFF" name="map-outline" size={21} />
+              <MaterialCommunityIcons color="#6A0DAD" name="map-outline" size={21} />
               <Text style={styles.secondaryButtonText}>Ver en el mapa</Text>
             </Pressable>
           ) : null}
@@ -159,7 +171,7 @@ export default function WhereAmIScreen() {
               accessibilityLabel="Abrir configuración de la aplicación"
               onPress={openSettings}
               style={styles.settingsButton}>
-              <Ionicons color="#AEB7C7" name="settings-outline" size={19} />
+              <Ionicons color="#5B465F" name="settings-outline" size={19} />
               <Text style={styles.settingsButtonText}>Abrir configuración</Text>
             </Pressable>
           ) : null}
@@ -172,7 +184,7 @@ export default function WhereAmIScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -202,12 +214,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   title: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
@@ -229,9 +241,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 14,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 22,
   },
   locationIcon: {
@@ -244,7 +256,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statusText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -255,19 +267,19 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   address: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 20,
     fontWeight: '900',
     lineHeight: 28,
     textAlign: 'center',
   },
   coordinates: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 13,
     fontVariant: ['tabular-nums'],
   },
   accuracy: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
   },
   errorTitle: {
@@ -319,7 +331,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   settingsButtonText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 13,
     fontWeight: '800',
   },

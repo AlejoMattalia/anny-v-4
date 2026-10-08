@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Animated, Dimensions, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { WifiLensConnectionCard } from '@/components/wifi-lens-connection-card';
 import { clearAuthSession } from '@/lib/auth';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -27,29 +28,29 @@ const homeSections: {
   title: string;
 }[] = [
   {
-    accent: '#208AEF',
-    background: 'rgba(32, 138, 239, 0.15)',
+    accent: '#3C1642',
+    background: '#E9E4EA',
     icon: 'pin',
     title: 'VIAJAR',
     route: '/travel',
   },
   {
-    accent: '#8D5BFF',
-    background: 'rgba(141, 91, 255, 0.13)',
+    accent: '#3C1642',
+    background: '#E9E4EA',
     icon: 'eye',
     title: 'EXPLORAR',
     route: '/explore',
   },
   {
-    accent: '#4DAA57',
-    background: 'rgba(77, 170, 87, 0.14)',
+    accent: '#3C1642',
+    background: '#E9E4EA',
     icon: 'help',
     title: 'AYUDA',
     route: '/help',
   },
   {
-    accent: '#D79B00',
-    background: 'rgba(215, 155, 0, 0.14)',
+    accent: '#3C1642',
+    background: '#E9E4EA',
     icon: 'gear',
     title: 'CONFIGURACIÓN',
     route: '/settings',
@@ -163,7 +164,7 @@ export default function HomeScreen() {
             accessibilityLabel="Abrir menú"
             onPress={openDrawer}
             style={styles.menuButton}>
-            <Ionicons color="#FFFFFF" name="menu" size={24} />
+            <Ionicons color="#3C1642" name="menu" size={26} />
           </Pressable>
 
           <Image
@@ -179,57 +180,8 @@ export default function HomeScreen() {
           style={styles.mainScroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}>
-          <Pressable
-            accessibilityHint="Abre la conexión del lente ESP32"
-            accessibilityLabel="Lente Anny con cámara ESP32"
-            accessibilityRole="button"
-            onPress={() => router.push('/bluetooth-devices')}
-            style={styles.connectionPanel}>
-            <View style={styles.connectionHeader}>
-              <View style={styles.connectionIconWrap}>
-                <MaterialCommunityIcons color="#72D68B" name="video-wireless-outline" size={21} />
-              </View>
-              <View style={styles.connectionText}>
-                <Text style={styles.connectionTitle}>Lente Anny ESP32</Text>
-                <View style={styles.connectionStatusRow}>
-                  <View
-                    style={[
-                      styles.statusDot,
-                      styles.statusDotDisconnected,
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.connectionStatusText,
-                      styles.connectionStatusTextDisconnected,
-                    ]}>
-                    Configurar dispositivo
-                  </Text>
-                </View>
-              </View>
-              <Ionicons color="#7F8A9B" name="chevron-forward" size={21} />
-            </View>
-
-            <View style={styles.connectionBody}>
-              <View style={styles.networkSelector}>
-                <View style={[styles.networkOption, styles.networkOptionInternetActive]}>
-                  <MaterialCommunityIcons color="#FFFFFF" name="wifi" size={16} />
-                  <Text style={[styles.networkText, styles.networkTextActive]}>WiFi</Text>
-                </View>
-                <View style={styles.networkOption}>
-                  <MaterialCommunityIcons color="#7F8A9B" name="key-outline" size={16} />
-                  <Text style={styles.networkText}>Activación</Text>
-                </View>
-              </View>
-
-              <View style={styles.connectionDeviceBox}>
-                <Text style={styles.connectionDeviceLabel}>Dispositivo</Text>
-                <Text numberOfLines={1} style={styles.connectionDeviceName}>
-                  Lente con cámara
-                </Text>
-              </View>
-            </View>
-          </Pressable>
+          {/* Panel de placa ESP32 con Activación deshabilitado; conexión de lentes WiFi como v3. */}
+          <WifiLensConnectionCard />
 
           <View style={styles.sections}>
             {homeSections.map((section) => (
@@ -254,14 +206,19 @@ export default function HomeScreen() {
 
                 <View style={styles.sectionText}>
                   <View style={styles.sectionTitleRow}>
-                    <Text style={[styles.sectionTitle, { color: section.soon ? '#7F8A9B' : section.accent }]}>
+                    <Text style={[styles.sectionTitle, { color: section.soon ? '#6F5873' : section.accent }]}>
                       {section.title}
                     </Text>
                     {section.soon ? <Text style={styles.soonBadge}>Próximamente</Text> : null}
                   </View>
                 </View>
 
-                <Ionicons color={section.soon ? '#596474' : section.accent} name="chevron-forward" size={27} />
+                <Ionicons
+                  color={section.soon ? '#8D8290' : section.accent}
+                  name="chevron-forward"
+                  size={22}
+                  style={styles.sectionChevron}
+                />
               </Pressable>
             ))}
           </View>
@@ -280,28 +237,28 @@ export default function HomeScreen() {
 
         <View style={styles.bottomTabs}>
           <Pressable accessibilityLabel="Inicio" style={styles.tabItem}>
-            <Ionicons color="#8D5BFF" name="home" size={20} />
+            <Ionicons color="#3C1642" name="home" size={24} />
             <Text style={[styles.tabText, styles.tabActive]}>Inicio</Text>
           </Pressable>
           <Pressable
             accessibilityLabel="Capacitaciones"
             onPress={() => router.push('/training' as Href)}
             style={styles.tabItem}>
-            <MaterialCommunityIcons color="#7F8A9B" name="school-outline" size={20} />
+            <MaterialCommunityIcons color="#828595" name="school-outline" size={24} />
             <Text style={styles.tabText}>Capacitaciones</Text>
           </Pressable>
           <Pressable
             accessibilityLabel="Contactos"
             onPress={() => router.push('/contacts' as Href)}
             style={styles.tabItem}>
-            <Ionicons color="#7F8A9B" name="call-outline" size={20} />
+            <Ionicons color="#828595" name="call-outline" size={24} />
             <Text style={styles.tabText}>Contactos</Text>
           </Pressable>
           <Pressable
             accessibilityLabel="Perfil"
             onPress={() => router.push('/profile' as Href)}
             style={styles.tabItem}>
-            <Ionicons color="#7F8A9B" name="person-circle-outline" size={20} />
+            <Ionicons color="#828595" name="person-circle-outline" size={24} />
             <Text style={styles.tabText}>Perfil</Text>
           </Pressable>
         </View>
@@ -342,7 +299,7 @@ export default function HomeScreen() {
                     key={item.label}
                     onPress={() => selectDrawerItem(item.route)}
                     style={[styles.drawerItem, item.label === 'Home' ? styles.drawerItemActive : null]}>
-                    <MaterialCommunityIcons color="#8D5BFF" name={item.icon} size={24} style={styles.drawerItemIcon} />
+                    <MaterialCommunityIcons color="#FFFFFF" name={item.icon} size={24} style={styles.drawerItemIcon} />
                     <Text style={styles.drawerItemText}>{item.label}</Text>
                   </Pressable>
                 ))}
@@ -351,7 +308,7 @@ export default function HomeScreen() {
                   accessibilityLabel="Cerrar sesión"
                   onPress={closeSession}
                   style={styles.drawerItem}>
-                  <MaterialCommunityIcons color="#8D5BFF" name="logout" size={24} style={styles.drawerItemIcon} />
+                  <MaterialCommunityIcons color="#FFFFFF" name="logout" size={24} style={styles.drawerItemIcon} />
                   <Text style={styles.drawerItemText}>Cerrar sesión</Text>
                 </Pressable>
               </View>
@@ -368,7 +325,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -377,7 +334,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: 'rgba(124, 76, 255, 0.2)',
+    backgroundColor: 'rgba(60, 22, 66, 0.05)',
   },
   bottomGlow: {
     position: 'absolute',
@@ -386,35 +343,34 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(32, 138, 239, 0.14)',
+    backgroundColor: 'rgba(60, 22, 66, 0.04)',
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 18,
     paddingTop: 4,
   },
   header: {
     minHeight: 58,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   menuButton: {
     position: 'absolute',
     left: 0,
     top: 10,
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: '#0D141D',
-    borderWidth: 1,
-    borderColor: '#1D2633',
+    borderRadius: 22,
+    backgroundColor: '#F2EDF3',
   },
   logo: {
-    width: 96,
-    height: 46,
+    width: 70,
+    height: 54,
+    tintColor: '#3C1642',
   },
   statusDot: {
     width: 8,
@@ -423,23 +379,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#4DAA57',
   },
   statusDotDisconnected: {
-    backgroundColor: '#7F8A9B',
+    backgroundColor: '#6F5873',
   },
   content: {
     flexGrow: 1,
-    paddingBottom: 8,
-    gap: 12,
+    paddingTop: 8,
+    paddingBottom: 20,
+    gap: 18,
   },
   mainScroll: {
     flex: 1,
   },
   connectionPanel: {
     minHeight: 112,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#263244',
-    backgroundColor: 'rgba(12, 17, 24, 0.98)',
-    padding: 12,
+    borderColor: '#E1D9E3',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
     gap: 11,
   },
   connectionHeader: {
@@ -453,16 +410,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 21,
-    backgroundColor: 'rgba(141, 91, 255, 0.16)',
+    backgroundColor: '#F2EDF3',
     borderWidth: 1,
-    borderColor: 'rgba(177, 140, 255, 0.28)',
+    borderColor: '#E1D9E3',
   },
   connectionText: {
     flex: 1,
     minWidth: 0,
   },
   connectionTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -478,7 +435,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   connectionStatusTextDisconnected: {
-    color: '#AEB7C7',
+    color: '#6F5873',
   },
   connectionBody: {
     flexDirection: 'row',
@@ -490,8 +447,8 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#080C12',
+    borderColor: '#E1D9E3',
+    backgroundColor: '#F8F6F8',
     padding: 4,
     gap: 4,
   },
@@ -505,13 +462,13 @@ const styles = StyleSheet.create({
     borderRadius: 7,
   },
   networkOptionActive: {
-    backgroundColor: '#5A2371',
+    backgroundColor: '#3C1642',
   },
   networkOptionInternetActive: {
-    backgroundColor: '#315C43',
+    backgroundColor: '#3C1642',
   },
   networkText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
   },
@@ -526,18 +483,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#080C12',
+    borderColor: '#E1D9E3',
+    backgroundColor: '#F8F6F8',
     paddingHorizontal: 10,
   },
   connectionDeviceLabel: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   connectionDeviceName: {
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 11,
     fontWeight: '900',
     marginTop: 3,
@@ -564,12 +521,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   batteryValue: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
   batteryLabel: {
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 10,
     fontWeight: '900',
   },
@@ -587,18 +544,24 @@ const styles = StyleSheet.create({
   },
   sections: {
     flex: 1,
-    gap: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
   },
   sectionCard: {
-    flex: 1,
-    minHeight: 84,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
+    width: '47.5%',
+    minHeight: 116,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderColor: '#DED5E0',
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 3,
   },
   sectionCardDisabled: {
     borderColor: '#252D38',
@@ -606,29 +569,37 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   sectionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginBottom: 8,
   },
   sectionText: {
-    flex: 1,
+    width: '100%',
   },
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 6,
+    width: '100%',
+    paddingRight: 22,
   },
   sectionTitle: {
-    fontSize: 16,
+    flexShrink: 1,
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0,
   },
+  sectionChevron: {
+    position: 'absolute',
+    right: 12,
+    bottom: 11,
+  },
   soonBadge: {
-    color: '#C4CAD4',
+    color: '#6F5873',
     fontSize: 8,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -640,13 +611,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(127, 138, 155, 0.16)',
   },
   voiceBar: {
-    minHeight: 50,
-    width: '82%',
+    minHeight: 52,
+    width: '86%',
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 25,
-    backgroundColor: '#5A2371',
+    backgroundColor: '#3C1642',
     paddingHorizontal: 16,
     shadowColor: '#000000',
     shadowOpacity: 0.35,
@@ -657,8 +628,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   voiceBarDisabled: {
-    backgroundColor: '#3A4350',
-    opacity: 0.72,
+    backgroundColor: '#C1B5C3',
+    opacity: 1,
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -674,15 +645,15 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   bottomTabs: {
-    minHeight: 56,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderTopColor: '#1D2633',
-    backgroundColor: 'rgba(5, 7, 11, 0.96)',
-    marginHorizontal: -10,
-    paddingHorizontal: 10,
+    borderTopColor: '#E5DFE7',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: -18,
+    paddingHorizontal: 12,
     paddingTop: 5,
   },
   tabItem: {
@@ -692,12 +663,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   tabText: {
-    color: '#7F8A9B',
+    color: '#828595',
     fontSize: 8,
     fontWeight: '800',
   },
   tabActive: {
-    color: '#8D5BFF',
+    color: '#3C1642',
   },
   drawerLayer: {
     position: 'absolute',
@@ -726,9 +697,7 @@ const styles = StyleSheet.create({
   drawer: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#0C1118',
-    borderRightWidth: 1,
-    borderRightColor: '#1D2633',
+    backgroundColor: '#3C1642',
     paddingHorizontal: 18,
     paddingTop: 14,
     paddingBottom: 24,
@@ -765,19 +734,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   drawerItemActive: {
-    backgroundColor: '#111923',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   drawerItemIcon: {
     width: 42,
   },
   drawerItemText: {
     flex: 1,
-    color: '#D9DEEA',
+    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '800',
   },
   version: {
-    color: '#7F8A9B',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',

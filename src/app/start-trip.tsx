@@ -22,6 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useCompass } from '@/hooks/use-compass';
+import { getCurrentLocation } from '@/lib/current-location';
 import { searchLocations } from '@/lib/location-search';
 import { sendDestinationAlert } from '@/lib/notification-service';
 import { loadSettings } from '@/lib/settings-storage';
@@ -768,7 +769,7 @@ export default function StartTripScreen() {
               ]}
             >
               <Ionicons
-                color={isSelected ? '#FFFFFF' : '#7F8A9B'}
+                color={isSelected ? '#FFFFFF' : '#6F5873'}
                 name={mode.icon}
                 size={19}
               />
@@ -791,21 +792,21 @@ export default function StartTripScreen() {
   useEffect(() => {
     async function initializeGPS() {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-          setUserLocation(coords);
-          const addressText = await fetchReverseGeocode(coords.latitude, coords.longitude);
-          setCurrentAddress(addressText);
-        } else {
+        const pos = await getCurrentLocation({
+          maxCachedAgeMs: 30_000,
+          maxCachedAccuracyMeters: 100,
+        });
+        const coords = { latitude: pos.latitude, longitude: pos.longitude };
+        setUserLocation(coords);
+        const addressText = await fetchReverseGeocode(coords.latitude, coords.longitude);
+        setCurrentAddress(addressText);
+      } catch (e) {
+        if (e instanceof Error && e.message.includes('permiso de ubicación')) {
           void speak('Permiso de ubicación denegado. Se utilizarán coordenadas por defecto para simular.');
           setUserLocation({ latitude: -34.6037, longitude: -58.3816 }); // Buenos Aires Obelisk fallback
+        } else {
+          console.warn('GPS initialisation failed:', e);
         }
-      } catch (e) {
-        console.warn('GPS initialisation failed:', e);
       }
     }
     async function initializeSettings() {
@@ -1817,8 +1818,8 @@ export default function StartTripScreen() {
 
       {isSearchingResults ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator color="#6A29FF" size="large" />
-          <Text style={{ color: '#7F8A9B', marginTop: 12, fontWeight: '800' }}>Buscando ubicaciones...</Text>
+          <ActivityIndicator color="#6A0DAD" size="large" />
+          <Text style={{ color: '#6F5873', marginTop: 12, fontWeight: '800' }}>Buscando ubicaciones...</Text>
         </View>
       ) : (
         <FlatList
@@ -1827,7 +1828,7 @@ export default function StartTripScreen() {
           contentContainerStyle={styles.resultsList}
           ListEmptyComponent={
             <View style={{ flex: 1, paddingVertical: 40, alignItems: 'center' }}>
-              <Text style={{ color: '#7F8A9B', fontWeight: '800' }}>
+              <Text style={{ color: '#6F5873', fontWeight: '800' }}>
                 {searchQuery.trim().length < 3
                   ? 'Escribe al menos 3 caracteres...'
                   : 'No se encontraron resultados.'}
@@ -1845,7 +1846,7 @@ export default function StartTripScreen() {
                 <Text numberOfLines={2} style={styles.resultAddress}>{item.address}</Text>
               </View>
               <Ionicons
-                color={index === 0 ? '#B18CFF' : '#596474'}
+                color={index === 0 ? '#6A0DAD' : '#596474'}
                 name="chevron-forward"
                 size={20}
               />
@@ -1876,7 +1877,7 @@ export default function StartTripScreen() {
               }}
               style={styles.backButton}
             >
-              <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+              <Ionicons color="#3C1642" name="chevron-back" size={24} />
             </Pressable>
             <Text style={styles.headerTitle}>{screenTitle}</Text>
           </View>
@@ -1886,7 +1887,7 @@ export default function StartTripScreen() {
         {state === 'search_start' && (
           <View style={showInlineSearchResults ? styles.flexContainer : styles.contentCenter}>
             <View style={styles.logoRow}>
-              <MaterialCommunityIcons color="#B18CFF" name="triangle" size={20} />
+              <MaterialCommunityIcons color="#6A0DAD" name="triangle" size={20} />
               <Text style={styles.logoText}>ANNY</Text>
             </View>
 
@@ -1896,17 +1897,17 @@ export default function StartTripScreen() {
 
             {/* Real Search Input Box */}
             <View style={styles.searchInputContainer}>
-              <Ionicons color="#7F8A9B" name="search" size={20} style={styles.searchIcon} />
+              <Ionicons color="#6F5873" name="search" size={20} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Escribe tu destino..."
-                placeholderTextColor="#7F8A9B"
+                placeholderTextColor="#6F5873"
                 value={searchQuery}
                 onChangeText={updateSearchQuery}
               />
               {searchQuery.length > 0 && (
                 <Pressable onPress={() => updateSearchQuery('')}>
-                  <Ionicons color="#7F8A9B" name="close-circle" size={18} />
+                  <Ionicons color="#6F5873" name="close-circle" size={18} />
                 </Pressable>
               )}
             </View>
@@ -1979,7 +1980,7 @@ export default function StartTripScreen() {
               <View style={[styles.pulseCircle, styles.pulseCircleLarge]} />
               <View style={[styles.pulseCircle, styles.pulseCircleMedium]} />
               <View style={styles.pulseInnerBg}>
-                <Ionicons color="#B18CFF" name="mic" size={44} />
+                <Ionicons color="#6A0DAD" name="mic" size={44} />
               </View>
             </View>
 
@@ -2000,7 +2001,7 @@ export default function StartTripScreen() {
               }}
               style={styles.cancelSearchBtn}
             >
-              <Ionicons color="#7F8A9B" name="close" size={20} />
+              <Ionicons color="#6F5873" name="close" size={20} />
               <Text style={styles.cancelSearchText}>Cancelar</Text>
             </Pressable>
           </View>
@@ -2011,17 +2012,17 @@ export default function StartTripScreen() {
           <View style={styles.flexContainer}>
             {/* Real Search Input Box */}
             <View style={styles.searchInputContainer}>
-              <Ionicons color="#7F8A9B" name="search" size={20} style={styles.searchIcon} />
+              <Ionicons color="#6F5873" name="search" size={20} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Escribe tu destino..."
-                placeholderTextColor="#7F8A9B"
+                placeholderTextColor="#6F5873"
                 value={searchQuery}
                 onChangeText={updateSearchQuery}
               />
               {searchQuery.length > 0 && (
                 <Pressable onPress={() => updateSearchQuery('')}>
-                  <Ionicons color="#7F8A9B" name="close-circle" size={18} />
+                  <Ionicons color="#6F5873" name="close-circle" size={18} />
                 </Pressable>
               )}
             </View>
@@ -2048,7 +2049,7 @@ export default function StartTripScreen() {
 
             <View style={styles.destinationSummaryCard}>
               <View style={styles.summaryDestIcon}>
-                <Ionicons color="#B18CFF" name="location" size={22} />
+                <Ionicons color="#6A0DAD" name="location" size={22} />
               </View>
               <View style={styles.summaryDestInfo}>
                 <Text style={styles.summaryDestName}>{selectedDest.name}</Text>
@@ -2066,8 +2067,8 @@ export default function StartTripScreen() {
                 accessibilityState={{ busy: true }}
                 style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
               >
-                <ActivityIndicator color="#6A29FF" size="large" />
-                <Text style={{ color: '#7F8A9B', marginTop: 12, fontWeight: '800' }}>
+                <ActivityIndicator color="#6A0DAD" size="large" />
+                <Text style={{ color: '#6F5873', marginTop: 12, fontWeight: '800' }}>
                   Calculando mejor ruta en {travelModeLabel}...
                 </Text>
               </View>
@@ -2476,7 +2477,7 @@ export default function StartTripScreen() {
               ) : activeNavPanel === 'next' ? (
                 <View style={styles.infoSceneCard}>
                   <View style={styles.infoSceneHeader}>
-                    <Ionicons color="#B18CFF" name="arrow-forward-circle-outline" size={20} />
+                    <Ionicons color="#6A0DAD" name="arrow-forward-circle-outline" size={20} />
                     <Text style={styles.infoSceneLabel}>Lo que sigue</Text>
                   </View>
                   <Text style={styles.infoSceneTitle}>
@@ -2879,7 +2880,7 @@ export default function StartTripScreen() {
                   onPress={() => speak('Contactando al centro de asistencia remota.')}
                   style={styles.sosActionButton}
                 >
-                  <Ionicons color="#B18CFF" name="headset" size={20} />
+                  <Ionicons color="#6A0DAD" name="headset" size={20} />
                   <Text style={styles.sosActionText}>Asistencia remota</Text>
                 </Pressable>
                 <Pressable
@@ -2889,7 +2890,7 @@ export default function StartTripScreen() {
                   }}
                   style={styles.sosActionButton}
                 >
-                  <Ionicons color="#D9DEEA" name="home" size={20} />
+                  <Ionicons color="#3C1642" name="home" size={20} />
                   <Text style={styles.sosActionText}>Volver al inicio</Text>
                 </Pressable>
                 <Pressable
@@ -2965,7 +2966,7 @@ export default function StartTripScreen() {
                     <Text style={styles.drawerItemText}>¿Dónde estoy?</Text>
                     <Text style={styles.drawerItemHint}>Consultar tu ubicación actual</Text>
                   </View>
-                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
+                  <Ionicons color="#6F5873" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
                   accessibilityHint="Anuncia el tiempo estimado restante"
@@ -2987,7 +2988,7 @@ export default function StartTripScreen() {
                       {Math.max(1, Math.round(remainingDuration / 60))} minutos aproximadamente
                     </Text>
                   </View>
-                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
+                  <Ionicons color="#6F5873" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
                   accessibilityHint="Anuncia la próxima indicación del recorrido"
@@ -3013,7 +3014,7 @@ export default function StartTripScreen() {
                       {nextStep?.instruction ?? 'Último tramo del viaje'}
                     </Text>
                   </View>
-                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
+                  <Ionicons color="#6F5873" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
                   accessibilityHint="Repite por voz la indicación actual"
@@ -3027,7 +3028,7 @@ export default function StartTripScreen() {
                     <Text style={styles.drawerItemText}>Escuchar de nuevo</Text>
                     <Text style={styles.drawerItemHint}>Repetir la indicación actual</Text>
                   </View>
-                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
+                  <Ionicons color="#6F5873" name="chevron-forward" size={18} />
                 </Pressable>
                 <Pressable
                   accessibilityHint="Abre la pantalla de configuración"
@@ -3045,7 +3046,7 @@ export default function StartTripScreen() {
                     <Text style={styles.drawerItemText}>Ajustes de audio</Text>
                     <Text style={styles.drawerItemHint}>Configurar voz y simulación</Text>
                   </View>
-                  <Ionicons color="#7F8A9B" name="chevron-forward" size={18} />
+                  <Ionicons color="#6F5873" name="chevron-forward" size={18} />
                 </Pressable>
               </View>
 
@@ -3068,7 +3069,7 @@ export default function StartTripScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   safeArea: {
     flex: 1,
@@ -3087,11 +3088,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
   },
@@ -3112,13 +3113,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   logoText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 20,
     fontWeight: '900',
     letterSpacing: 2,
   },
   mainPrompt: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 22,
     fontWeight: '900',
     textAlign: 'center',
@@ -3129,7 +3130,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   travelModeLabel: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '900',
     marginBottom: 8,
@@ -3143,9 +3144,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 10,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3153,11 +3154,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   travelModeButtonSelected: {
-    borderColor: '#6A29FF',
-    backgroundColor: '#6A29FF',
+    borderColor: '#6A0DAD',
+    backgroundColor: '#6A0DAD',
   },
   travelModeButtonText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '900',
   },
@@ -3181,17 +3182,17 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 8,
-    shadowColor: '#6A29FF',
+    shadowColor: '#6A0DAD',
     shadowOpacity: 0.4,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
   },
   subPrompt: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 14,
     fontWeight: '800',
     textAlign: 'center',
@@ -3206,15 +3207,15 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0C1118',
+    borderColor: '#DED5E0',
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   startActionText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
@@ -3222,9 +3223,9 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 24,
     paddingHorizontal: 16,
     height: 48,
@@ -3236,13 +3237,13 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '800',
   },
   // Searching simulated screen
   searchingTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 40,
@@ -3258,7 +3259,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#6A29FF',
+    borderColor: '#6A0DAD',
     backgroundColor: 'rgba(106, 41, 255, 0.08)',
   },
   pulseCircleLarge: {
@@ -3279,7 +3280,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#6A29FF',
+    borderColor: '#6A0DAD',
   },
   suggestionsBox: {
     width: '100%',
@@ -3288,13 +3289,13 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   suggestionsHeader: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 13,
     fontWeight: '800',
     marginBottom: 4,
   },
   suggestionItem: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -3306,16 +3307,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
   },
   cancelSearchText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 13,
     fontWeight: '900',
   },
   // Search Results screen
   sectionHeader: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3331,23 +3332,23 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0C1118',
+    borderColor: '#DED5E0',
+    backgroundColor: '#FFFFFF',
   },
   resultCardHighlighted: {
-    borderColor: '#6A29FF',
+    borderColor: '#6A0DAD',
     backgroundColor: 'rgba(106, 41, 255, 0.05)',
   },
   resultTextWrapper: {
     flex: 1,
   },
   resultName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
   resultAddress: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
@@ -3355,9 +3356,9 @@ const styles = StyleSheet.create({
   searchAgainBtn: {
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3365,7 +3366,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   searchAgainText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -3375,9 +3376,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 14,
     marginBottom: 16,
   },
@@ -3393,18 +3394,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryDestName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '900',
   },
   summaryDestAddr: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 2,
   },
   summaryLabel: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -3419,16 +3420,16 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   transitAlternativesTitle: {
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
   transitAlternativeCard: {
     width: 190,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -3442,12 +3443,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   transitAlternativeName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
   transitAlternativeTime: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 2,
@@ -3481,7 +3482,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderRadius: 10,
-    backgroundColor: '#111823',
+    backgroundColor: '#F6F2F7',
     paddingHorizontal: 8,
     paddingVertical: 12,
   },
@@ -3504,7 +3505,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#208AEF',
   },
   journeyFlowTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 10,
     fontWeight: '900',
     textAlign: 'center',
@@ -3517,7 +3518,7 @@ const styles = StyleSheet.create({
   },
   routeOptionCard: {
     borderWidth: 1,
-    borderColor: '#6A29FF',
+    borderColor: '#6A0DAD',
     borderRadius: 8,
     backgroundColor: 'rgba(106, 41, 255, 0.04)',
     padding: 14,
@@ -3525,7 +3526,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   googleMapsAttribution: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '700',
     textAlign: 'center',
@@ -3537,14 +3538,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   routeErrorTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 17,
     fontWeight: '900',
     marginTop: 12,
     textAlign: 'center',
   },
   routeErrorText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 19,
@@ -3558,7 +3559,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderRadius: 22,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
     marginTop: 18,
     paddingHorizontal: 22,
   },
@@ -3581,18 +3582,18 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   routeSegmentLabel: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 12,
     fontWeight: '900',
   },
   routeSegmentSub: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '800',
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: '#1D2633',
+    backgroundColor: '#DED5E0',
   },
   summaryStatsRow: {
     flexDirection: 'row',
@@ -3600,13 +3601,13 @@ const styles = StyleSheet.create({
   startNavButton: {
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     elevation: 4,
-    shadowColor: '#6A29FF',
+    shadowColor: '#6A0DAD',
     shadowOpacity: 0.3,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
@@ -3636,7 +3637,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#208AEF',
   },
   headerTransit: {
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
   },
   stepHeaderTitle: {
     color: '#FFFFFF',
@@ -3646,9 +3647,9 @@ const styles = StyleSheet.create({
   },
   simulationStatusCard: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 12,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 14,
     marginBottom: 16,
     gap: 8,
@@ -3659,29 +3660,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   simulationStatusLabel: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   simulationStatusValue: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
   },
   simulationProgressTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: '#111823',
+    backgroundColor: '#F6F2F7',
     overflow: 'hidden',
   },
   simulationProgressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
   },
   simulationStatusHint: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -3708,13 +3709,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   transitStopCounter: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 22,
     fontWeight: '900',
     textAlign: 'center',
   },
   dataSourceHint: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 16,
@@ -3724,7 +3725,7 @@ const styles = StyleSheet.create({
   boardTransitButton: {
     minHeight: 50,
     borderRadius: 25,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3740,9 +3741,9 @@ const styles = StyleSheet.create({
   infoSceneCard: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 16,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 20,
     gap: 10,
   },
@@ -3752,18 +3753,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   infoSceneLabel: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   infoSceneTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 24,
     fontWeight: '900',
   },
   infoSceneBody: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 22,
@@ -3797,14 +3798,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   navDirectiveText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 24,
     fontWeight: '900',
     textAlign: 'center',
     marginBottom: 8,
   },
   navDirectiveSub: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
@@ -3813,9 +3814,9 @@ const styles = StyleSheet.create({
   navFooterStats: {
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     marginBottom: 16,
   },
   statBox: {
@@ -3826,13 +3827,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statLabel: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   statValue: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 16,
     fontWeight: '900',
   },
@@ -3846,13 +3847,13 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0C1118',
+    borderColor: '#DED5E0',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   navActionOutlineText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
@@ -3867,7 +3868,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3888,8 +3889,8 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#05070B',
+    borderColor: '#DED5E0',
+    backgroundColor: '#FCFCFC',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3912,7 +3913,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   quickMenuTriggerText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '900',
   },
@@ -3965,7 +3966,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   ratingTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -4007,24 +4008,24 @@ const styles = StyleSheet.create({
   },
   overlayContent: {
     width: '100%',
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 12,
     padding: 20,
   },
   routeMapModal: {
     width: '100%',
     height: '78%',
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 12,
     padding: 14,
     overflow: 'hidden',
   },
   routeMapSubtitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '800',
     marginTop: 3,
@@ -4034,7 +4035,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#09111B',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     overflow: 'hidden',
   },
   routeMapTile: {
@@ -4046,7 +4047,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
   },
   routeMapCurrentMarker: {
     position: 'absolute',
@@ -4064,7 +4065,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
@@ -4091,11 +4092,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
     marginLeft: 8,
   },
   routeMapLegendText: {
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 10,
     fontWeight: '800',
   },
@@ -4103,7 +4104,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 6,
     bottom: 48,
-    color: '#1D2633',
+    color: '#DED5E0',
     fontSize: 9,
     fontWeight: '800',
     backgroundColor: 'rgba(255, 255, 255, 0.78)',
@@ -4117,16 +4118,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   overlayTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 16,
     fontWeight: '900',
   },
   mockMapContainer: {
     width: '100%',
     height: 160,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
     marginBottom: 16,
     alignItems: 'center',
@@ -4137,13 +4138,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 2,
     height: '100%',
-    backgroundColor: '#111823',
+    backgroundColor: '#F6F2F7',
   },
   mapGridLineH: {
     position: 'absolute',
     width: '100%',
     height: 2,
-    backgroundColor: '#111823',
+    backgroundColor: '#F6F2F7',
   },
   mapCurrentPin: {
     width: 20,
@@ -4178,19 +4179,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   whereAmILocationTitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   whereAmIStreet: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
     marginTop: 4,
   },
   whereAmIReference: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '800',
     textAlign: 'center',
@@ -4245,8 +4246,8 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#05070B',
+    borderColor: '#DED5E0',
+    backgroundColor: '#FCFCFC',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -4258,7 +4259,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   sosActionText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
@@ -4268,7 +4269,7 @@ const styles = StyleSheet.create({
     maxHeight: '92%',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#293548',
+    borderColor: '#DED5E0',
   },
   quickMenuHeader: {
     flexDirection: 'row',
@@ -4280,7 +4281,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   quickMenuSubtitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 3,
@@ -4305,9 +4306,9 @@ const styles = StyleSheet.create({
   drawerItem: {
     minHeight: 62,
     borderRadius: 12,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -4322,7 +4323,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   drawerItemHint: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 16,

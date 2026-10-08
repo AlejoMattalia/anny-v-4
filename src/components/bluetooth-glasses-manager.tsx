@@ -219,7 +219,7 @@ export function BluetoothGlassesManager() {
           {connectionCompleted ? (
             <MaterialCommunityIcons color="#FFFFFF" name="check" size={23} />
           ) : (
-            <ActivityIndicator color="#B18CFF" size="small" />
+            <ActivityIndicator color="#6A0DAD" size="small" />
           )}
         </View>
         <View style={styles.noticeText}>
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   },
   notice: {
     alignItems: 'center',
-    backgroundColor: '#141823',
+    backgroundColor: '#F2EDF3',
     borderColor: 'rgba(177, 140, 255, 0.55)',
     borderRadius: 18,
     borderWidth: 1,
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   noticeTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '700',
   },

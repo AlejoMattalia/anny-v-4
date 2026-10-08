@@ -1,19 +1,22 @@
 import { usePathname } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { speak } from '@/lib/voice';
+import { useWifiLens } from '@/context/wifi-lens-context';
 
 const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
   '/home':
     'Inicio de Anny. Podés elegir Viajar, Explorar, Ayuda o Configuración. También podés abrir el menú para acceder a tu perfil, tutorial y términos de uso.',
   '/help':
-    'Sección Ayuda. Podés abrir el streaming en tiempo real de los lentes Anny vinculados a tu cuenta.',
+    'Sección Ayuda. Podés escanear texto, imágenes y billetes, o abrir el streaming en tiempo real del lente o del celular.',
   '/anny-board':
     'Sección Lente Anny. Podés abrir el streaming en tiempo real de los lentes vinculados a tu cuenta.',
   '/remote-cameras':
     'Streaming de Lente Anny. Podés elegir una cámara vinculada o vincular una nueva con su código de activación.',
   '/explore':
-    'Sección Explorar. Podés elegir Dónde estoy para conocer tu ubicación, Explorador de mapa para buscar y recorrer lugares, o Lugares cercanos para encontrar comercios y servicios.',
+    'Sección Explorar. Podés conocer tu ubicación, explorar el mapa o buscar lugares cercanos.',
+  '/visual-scanner':
+    'Asistencia visual. Apuntá la cámara y mantené el celular quieto. Anny escanea automáticamente con el intervalo de Configuración y lee el resultado en voz alta. Podés detener la voz o escanear ahora con los botones.',
   '/map-explorer':
     'Explorador de mapa. Podés mover el mapa, escribir el nombre de un lugar, seleccionar marcadores o centrar el mapa en tu ubicación.',
   '/where-am-i':
@@ -33,7 +36,7 @@ const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
   '/contacts':
     'Contactos. Podés recorrer tu agenda, escuchar los datos de un contacto, marcarlo como favorito o llamarlo.',
   '/bluetooth-devices':
-    'Dispositivos. Acá podés conectar el lente con cámara ESP32 usando su código de activación y configurar el WiFi.',
+    'Dispositivos. Elegí WiFi o Hotspot y conectá una red.',
   '/settings':
     'Configuración. Podés revisar permisos, conexión de anteojos, brújula, velocidad de voz y velocidad de simulación.',
   '/profile':
@@ -50,8 +53,15 @@ const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
 
 export function ScreenVoiceAnnouncer() {
   const pathname = usePathname();
+  const { wifiLensConnection } = useWifiLens();
+  const connectionDialogOpen = wifiLensConnection.showDialog;
+  const announcedPath = useRef<string | null>(null);
 
   useEffect(() => {
+    if (announcedPath.current === pathname) return;
+    announcedPath.current = pathname;
+    // The visible connection dialog owns the startup announcement.
+    if (connectionDialogOpen) return;
     const announcement = SCREEN_ANNOUNCEMENTS[pathname];
 
     if (!announcement) {
@@ -63,7 +73,7 @@ export function ScreenVoiceAnnouncer() {
     }, 250);
 
     return () => clearTimeout(timeout);
-  }, [pathname]);
+  }, [pathname, connectionDialogOpen]);
 
   return null;
 }

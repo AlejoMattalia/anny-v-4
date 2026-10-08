@@ -48,6 +48,7 @@ export default function SettingsScreen() {
   const [compassActive, setCompassActive] = useState(false);
   const [voiceRate, setVoiceRate] = useState(1);
   const [simulationSpeed, setSimulationSpeed] = useState(1);
+  const [scanInterval, setScanInterval] = useState(30);
   const [voiceTrackWidth, setVoiceTrackWidth] = useState(1);
   const [simulationTrackWidth, setSimulationTrackWidth] = useState(1);
 
@@ -74,6 +75,7 @@ export default function SettingsScreen() {
       try {
         const saved = await loadSettings();
         setCompassActive(saved.compassActive);
+        setScanInterval(clamp(Number(saved.scanInterval) || 30, 5, 120));
         setVoiceRate(clamp(saved.voiceRate, VOICE_RATE_MIN, VOICE_RATE_MAX));
         setSimulationSpeed(
           clamp(saved.simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX),
@@ -171,7 +173,7 @@ export default function SettingsScreen() {
     return (
       <Pressable accessibilityLabel={label} onPress={onPress} style={styles.settingRow}>
         <View style={styles.rowIcon}>
-          <MaterialCommunityIcons color="#B18CFF" name={icon} size={21} />
+          <MaterialCommunityIcons color="#6A0DAD" name={icon} size={21} />
         </View>
         <View style={styles.rowText}>
           <Text style={styles.rowTitle}>{label}</Text>
@@ -180,7 +182,7 @@ export default function SettingsScreen() {
           accessibilityLabel={`Interruptor ${label}`}
           onValueChange={onPress}
           thumbColor="#FFFFFF"
-          trackColor={{ false: '#263244', true: '#5A2371' }}
+          trackColor={{ false: '#DED5E0', true: '#3C1642' }}
           value={value}
         />
       </Pressable>
@@ -223,7 +225,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.controlCard}>
         <View style={styles.controlHeader}>
-          <MaterialCommunityIcons color="#B18CFF" name={icon} size={21} />
+          <MaterialCommunityIcons color="#6A0DAD" name={icon} size={21} />
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>{title}</Text>
             <Text style={styles.rowDescription}>{description}</Text>
@@ -273,7 +275,7 @@ export default function SettingsScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="Volver al inicio" onPress={() => router.replace('/home')} style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Configuraciones</Text>
@@ -299,7 +301,7 @@ export default function SettingsScreen() {
               onPress: requestContactsPermission,
             })}
             <Pressable accessibilityLabel="Abrir ajustes de la app" onPress={openAppSettings} style={styles.outlineButton}>
-              <MaterialCommunityIcons color="#B18CFF" name="cog-outline" size={18} />
+              <MaterialCommunityIcons color="#6A0DAD" name="cog-outline" size={18} />
               <Text style={styles.outlineButtonText}>Abrir ajustes de la app</Text>
             </Pressable>
           </View>
@@ -308,7 +310,7 @@ export default function SettingsScreen() {
             <Text style={styles.sectionTitle}>Uso de orientación</Text>
             <Pressable accessibilityLabel="Brújula" onPress={() => toggleCompass(!compassActive)} style={styles.settingRow}>
               <View style={styles.rowIcon}>
-                <MaterialCommunityIcons color="#B18CFF" name="compass-outline" size={21} />
+                <MaterialCommunityIcons color="#6A0DAD" name="compass-outline" size={21} />
               </View>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>Brújula</Text>
@@ -317,7 +319,7 @@ export default function SettingsScreen() {
               <Switch
                 onValueChange={toggleCompass}
                 thumbColor="#FFFFFF"
-                trackColor={{ false: '#263244', true: '#5A2371' }}
+                trackColor={{ false: '#DED5E0', true: '#3C1642' }}
                 value={compassActive}
               />
             </Pressable>
@@ -355,11 +357,22 @@ export default function SettingsScreen() {
               helper: `${describeSimulationSpeed(simulationSpeed)} - ${simulationSpeed.toFixed(1)}x`,
             })}
 
-            <View style={styles.disabledAction}>
-              <MaterialCommunityIcons color="#7F8A9B" name="camera-metering-center" size={21} />
+            <View style={styles.settingRow}>
+              <MaterialCommunityIcons color="#6F5873" name="camera-metering-center" size={21} />
               <View style={styles.rowText}>
-                <Text style={styles.disabledTitle}>Configurar escaneo</Text>
+                <Text style={styles.rowTitle}>Escaneo automático</Text>
+                <Text style={styles.rowDescription}>Cada {scanInterval} segundos</Text>
               </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Disminuir intervalo de escaneo" disabled={scanInterval <= 5} style={styles.backButton} onPress={() => {
+                const next = Math.max(5, scanInterval - 5);
+                setScanInterval(next);
+                void saveSettings({ scanInterval: next });
+              }}><Ionicons name="remove" size={24} color="#6A0DAD" /></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Aumentar intervalo de escaneo" disabled={scanInterval >= 120} style={styles.backButton} onPress={() => {
+                const next = Math.min(120, scanInterval + 5);
+                setScanInterval(next);
+                void saveSettings({ scanInterval: next });
+              }}><Ionicons name="add" size={24} color="#6A0DAD" /></Pressable>
             </View>
           </View>
         </ScrollView>
@@ -371,7 +384,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -400,14 +413,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
@@ -417,7 +430,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   content: {
     paddingBottom: 18,
@@ -426,7 +439,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -438,9 +451,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 11,
     paddingVertical: 9,
     marginBottom: 9,
@@ -458,12 +471,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   rowTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
   rowDescription: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     lineHeight: 14,
     fontWeight: '800',
@@ -476,11 +489,11 @@ const styles = StyleSheet.create({
     gap: 7,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2A3342',
-    backgroundColor: '#101721',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F6F2F7',
   },
   outlineButtonText: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '900',
   },
@@ -497,28 +510,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
   },
   protocolButtonActive: {
-    borderColor: '#8D5BFF',
-    backgroundColor: '#5A2371',
+    borderColor: '#6A0DAD',
+    backgroundColor: '#3C1642',
   },
   protocolText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '900',
   },
   protocolTextActive: {
-    color: '#FFFFFF',
+    color: '#3C1642',
   },
   primaryButton: {
     minHeight: 42,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   primaryButtonText: {
     color: '#FFFFFF',
@@ -531,23 +544,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     opacity: 0.65,
     paddingHorizontal: 12,
     marginBottom: 9,
   },
   disabledTitle: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 14,
     fontWeight: '900',
   },
   controlCard: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 14,
     marginBottom: 12,
   },
@@ -564,7 +577,7 @@ const styles = StyleSheet.create({
   sliderTrack: {
     height: 12,
     borderRadius: 999,
-    backgroundColor: '#111823',
+    backgroundColor: '#F6F2F7',
     overflow: 'visible',
     justifyContent: 'center',
   },
@@ -574,7 +587,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     borderRadius: 999,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   sliderThumb: {
     position: 'absolute',
@@ -584,7 +597,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
     borderWidth: 3,
-    borderColor: '#8D5BFF',
+    borderColor: '#6A0DAD',
   },
   sliderLegend: {
     flexDirection: 'row',
@@ -594,12 +607,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sliderEdgeText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '800',
   },
   sliderValueText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 12,
     fontWeight: '900',
     textAlign: 'center',

@@ -211,7 +211,7 @@ export default function SignInScreen() {
                     onPress={() => setIsPasswordVisible((visible) => !visible)}
                     style={({ pressed }) => [styles.passwordToggle, pressed ? styles.passwordTogglePressed : null]}>
                     <Ionicons
-                      color="#AEB7C7"
+                      color="#6F5873"
                       name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
                       size={22}
                     />
@@ -270,7 +270,7 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#F2EDF3',
   },
   topGlow: {
     position: 'absolute',
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: 'rgba(124, 76, 255, 0.2)',
+    backgroundColor: 'rgba(60, 22, 66, 0.08)',
   },
   bottomGlow: {
     position: 'absolute',
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(32, 138, 239, 0.14)',
+    backgroundColor: 'rgba(60, 22, 66, 0.06)',
   },
   safeArea: {
     flex: 1,
@@ -298,42 +298,43 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 22,
-    paddingVertical: 24,
+    justifyContent: 'flex-end',
+    paddingTop: 30,
   },
   brandBlock: {
     alignItems: 'center',
-    marginBottom: 22,
+    marginBottom: 16,
   },
   logo: {
-    width: 178,
-    height: 88,
-    marginBottom: 20,
+    width: 132,
+    height: 112,
+    marginBottom: 12,
+    tintColor: '#3C1642',
   },
   headline: {
-    color: '#FFFFFF',
-    fontSize: 29,
+    color: '#3C1642',
+    fontSize: 26,
     fontWeight: '800',
     letterSpacing: 0,
   },
   formPanel: {
-    borderWidth: 1,
-    borderColor: '#1D2633',
-    borderRadius: 8,
-    backgroundColor: 'rgba(12, 17, 24, 0.94)',
-    padding: 16,
+    borderTopLeftRadius: 50,
+    borderTopRightRadius: 50,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 32,
+    paddingTop: 34,
+    paddingBottom: 28,
     shadowColor: '#000000',
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 8,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 5,
   },
   fieldGroup: {
     marginBottom: 14,
   },
   label: {
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 8,
@@ -342,17 +343,17 @@ const styles = StyleSheet.create({
     height: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 25,
     borderWidth: 1,
-    borderColor: '#202B3A',
-    backgroundColor: '#111923',
+    borderColor: '#D8CFDA',
+    backgroundColor: '#FFFFFF',
   },
   inputShellError: {
     borderColor: '#FF6B7A',
   },
   input: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#212121',
     fontSize: 16,
     paddingHorizontal: 14,
   },
@@ -378,17 +379,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 9,
     borderWidth: 1,
-    borderColor: '#2A3342',
-    borderRadius: 8,
-    backgroundColor: '#151D28',
+    borderColor: '#D8CFDA',
+    borderRadius: 24,
+    backgroundColor: '#C1B5C3',
     marginBottom: 12,
   },
   voiceLoginButtonPressed: {
     opacity: 0.82,
   },
   voiceLoginButtonActive: {
-    borderColor: '#8D5BFF',
-    backgroundColor: 'rgba(141, 91, 255, 0.22)',
+    borderColor: '#3C1642',
+    backgroundColor: '#6A0DAD',
   },
   voiceLoginText: {
     color: '#FFFFFF',
@@ -396,7 +397,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   voiceStatusText: {
-    color: '#B18CFF',
+    color: '#3C1642',
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 17,
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
   serverErrorBox: {
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 122, 0.45)',
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: 'rgba(255, 107, 122, 0.1)',
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -424,9 +425,9 @@ const styles = StyleSheet.create({
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: '#8D5BFF',
-    shadowColor: '#8D5BFF',
+    borderRadius: 26,
+    backgroundColor: '#6A0DAD',
+    shadowColor: '#000000',
     shadowOpacity: 0.35,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
@@ -450,13 +451,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   firstTimeEyebrow: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 3,
   },
   firstTimeText: {
-    color: '#B18CFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '700',
   },

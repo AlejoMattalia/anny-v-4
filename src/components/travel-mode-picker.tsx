@@ -74,7 +74,7 @@ export default function TravelModePicker({
               accessibilityLabel="Cerrar"
               onPress={onClose}
               style={styles.closeButton}>
-              <Ionicons color="#AEB7C7" name="close" size={23} />
+              <Ionicons color="#5B465F" name="close" size={23} />
             </Pressable>
           </View>
 
@@ -123,10 +123,10 @@ const styles = StyleSheet.create({
   },
   sheet: {
     borderTopWidth: 1,
-    borderTopColor: '#293546',
+    borderTopColor: '#DED5E0',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: '#0A0F16',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 28,
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 21,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   titleText: {
     flex: 1,
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
   },
@@ -182,9 +182,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 11,
     borderWidth: 1,
-    borderColor: '#1D2836',
+    borderColor: '#DED5E0',
     borderRadius: 11,
-    backgroundColor: '#101720',
+    backgroundColor: '#F6F2F7',
     paddingHorizontal: 12,
   },
   optionPressed: {
@@ -202,12 +202,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   optionLabel: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
   optionDescription: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
   },
 });

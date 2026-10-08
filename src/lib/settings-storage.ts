@@ -9,15 +9,17 @@ export interface AppSettings {
   notificationDistance: number;
   voiceRate: number;
   simulationSpeed: number;
+  scanInterval: number;
 }
 
 const defaultSettings: AppSettings = {
   compassActive: false,
   destinationAlertsEnabled: true,
-  glassesProtocol: 'bluetooth',
+  glassesProtocol: 'wifi',
   notificationDistance: 400,
   voiceRate: 1,
   simulationSpeed: 1,
+  scanInterval: 30,
 };
 
 export async function loadSettings(): Promise<AppSettings> {

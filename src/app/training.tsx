@@ -51,7 +51,7 @@ export default function TrainingScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="Volver al inicio" onPress={() => router.replace('/home')} style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Capacitaciones</Text>
@@ -91,7 +91,7 @@ export default function TrainingScreen() {
                               {activities.length} {activities.length === 1 ? 'actividad' : 'actividades'}
                             </Text>
                           </View>
-                          <Ionicons color={isActive ? '#B18CFF' : '#7F8A9B'} name={isActive ? 'chevron-up' : 'chevron-down'} size={20} />
+                          <Ionicons color={isActive ? '#6A0DAD' : '#6F5873'} name={isActive ? 'chevron-up' : 'chevron-down'} size={20} />
                         </Pressable>
 
                         {isActive ? (
@@ -129,7 +129,7 @@ export default function TrainingScreen() {
                                       accessibilityLabel={`Escuchar actividad ${activity.titleActivity}`}
                                       onPress={() => speakActivity(activity)}
                                       style={({ pressed }) => [styles.listenButton, pressed ? styles.listenButtonPressed : null]}>
-                                      <MaterialCommunityIcons color="#B18CFF" name="volume-high" size={17} />
+                                      <MaterialCommunityIcons color="#6A0DAD" name="volume-high" size={17} />
                                       <Text style={styles.listenButtonText}>Escuchar</Text>
                                     </Pressable>
                                   </View>
@@ -149,6 +149,25 @@ export default function TrainingScreen() {
               </View>
             ))}
         </ScrollView>
+
+        <View style={styles.bottomTabs}>
+          <Pressable accessibilityLabel="Inicio" onPress={() => router.replace('/home')} style={styles.tabItem}>
+            <Ionicons color="#828595" name="home-outline" size={24} />
+            <Text style={styles.tabText}>Inicio</Text>
+          </Pressable>
+          <Pressable accessibilityLabel="Capacitaciones" style={styles.tabItem}>
+            <MaterialCommunityIcons color="#3C1642" name="school" size={24} />
+            <Text style={[styles.tabText, styles.tabActive]}>Capacitaciones</Text>
+          </Pressable>
+          <Pressable accessibilityLabel="Contactos" onPress={() => router.replace('/contacts')} style={styles.tabItem}>
+            <Ionicons color="#828595" name="call-outline" size={24} />
+            <Text style={styles.tabText}>Contactos</Text>
+          </Pressable>
+          <Pressable accessibilityLabel="Perfil" onPress={() => router.replace('/profile')} style={styles.tabItem}>
+            <Ionicons color="#828595" name="person-circle-outline" size={24} />
+            <Text style={styles.tabText}>Perfil</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -157,7 +176,7 @@ export default function TrainingScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -186,19 +205,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '800',
     marginTop: 2,
@@ -209,24 +228,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 21,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   summaryPanel: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: 'rgba(12, 17, 24, 0.94)',
+    backgroundColor: '#FFFFFF',
     padding: 12,
     marginBottom: 10,
   },
   summaryTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     marginBottom: 4,
   },
   summaryText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700',
@@ -235,7 +254,7 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
   levelText: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '900',
     marginBottom: 10,
@@ -244,7 +263,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   sectionTitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -252,14 +271,14 @@ const styles = StyleSheet.create({
   },
   moduleCard: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     marginBottom: 10,
     overflow: 'hidden',
   },
   moduleCardActive: {
-    borderColor: '#8D5BFF',
+    borderColor: '#6A0DAD',
     backgroundColor: 'rgba(141, 91, 255, 0.11)',
   },
   moduleHeader: {
@@ -279,13 +298,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
-    backgroundColor: '#151D28',
+    backgroundColor: '#F2EDF3',
     borderWidth: 1,
-    borderColor: '#263244',
+    borderColor: '#DED5E0',
   },
   moduleIconActive: {
-    backgroundColor: '#8D5BFF',
-    borderColor: '#B18CFF',
+    backgroundColor: '#6A0DAD',
+    borderColor: '#6A0DAD',
   },
   moduleIconText: {
     color: '#FFFFFF',
@@ -297,28 +316,28 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   moduleTitle: {
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     lineHeight: 18,
   },
   moduleTitleActive: {
-    color: '#FFFFFF',
+    color: '#3C1642',
   },
   moduleMeta: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '800',
     marginTop: 4,
   },
   moduleDetails: {
     borderTopWidth: 1,
-    borderTopColor: '#1D2633',
+    borderTopColor: '#DED5E0',
     padding: 12,
     paddingTop: 11,
   },
   detailLabel: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -326,9 +345,9 @@ const styles = StyleSheet.create({
   },
   activityCard: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#101721',
+    backgroundColor: '#F6F2F7',
     padding: 11,
     marginBottom: 10,
   },
@@ -355,20 +374,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   activityType: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   activityTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     lineHeight: 18,
     marginTop: 1,
   },
   activityDescription: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '700',
@@ -387,7 +406,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 9,
     color: '#FFFFFF',
-    backgroundColor: '#1D2633',
+    backgroundColor: '#DED5E0',
     fontSize: 10,
     fontWeight: '900',
     lineHeight: 18,
@@ -395,13 +414,13 @@ const styles = StyleSheet.create({
   },
   stepText: {
     flex: 1,
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700',
   },
   emptySteps: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '700',
   },
@@ -413,35 +432,61 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2A3342',
-    backgroundColor: '#151D28',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
     marginTop: 10,
   },
   listenButtonPressed: {
     opacity: 0.82,
   },
   listenButtonText: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '900',
   },
   emptyPanel: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 14,
   },
   emptyTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     marginBottom: 4,
   },
   emptyText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700',
+  },
+  bottomTabs: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    borderTopWidth: 1,
+    borderTopColor: '#E5DFE7',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: -14,
+    paddingHorizontal: 12,
+    paddingTop: 5,
+  },
+  tabItem: {
+    minWidth: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  tabText: {
+    color: '#828595',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  tabActive: {
+    color: '#3C1642',
   },
 });

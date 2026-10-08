@@ -15,7 +15,7 @@ export default function AnnyBoardScreen() {
             accessibilityLabel="Volver al inicio"
             onPress={() => router.replace('/home')}
             style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>DISPOSITIVO</Text>
@@ -59,7 +59,7 @@ export default function AnnyBoardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#05070B' },
+  screen: { flex: 1, backgroundColor: '#FCFCFC' },
   topGlow: {
     position: 'absolute',
     top: -160,
@@ -84,12 +84,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: { flex: 1 },
   eyebrow: { color: '#72D68B', fontSize: 9, fontWeight: '900', letterSpacing: 1.5 },
-  title: { color: '#FFFFFF', fontSize: 19, fontWeight: '900', marginTop: 2 },
+  title: { color: '#3C1642', fontSize: 19, fontWeight: '900', marginTop: 2 },
   headerBadge: {
     width: 40,
     height: 40,
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#4DAA57',
   },
-  intro: { color: '#AEB7C7', fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  intro: { color: '#5B465F', fontSize: 14, lineHeight: 20, marginBottom: 16 },
   features: { gap: 10 },
   featureRow: {
     minHeight: 84,
@@ -106,9 +106,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
@@ -121,6 +121,6 @@ const styles = StyleSheet.create({
     borderRadius: 23,
   },
   featureText: { flex: 1, minWidth: 0, gap: 4 },
-  featureTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
-  featureDescription: { color: '#7F8A9B', fontSize: 12, lineHeight: 17 },
+  featureTitle: { color: '#3C1642', fontSize: 15, fontWeight: '900' },
+  featureDescription: { color: '#6F5873', fontSize: 12, lineHeight: 17 },
 });

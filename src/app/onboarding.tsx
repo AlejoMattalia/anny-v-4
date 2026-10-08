@@ -93,7 +93,7 @@ export default function OnboardingScreen() {
           <View style={styles.panel}>
             {loading ? (
               <View style={styles.stateBox}>
-                <ActivityIndicator color="#8D5BFF" />
+                <ActivityIndicator color="#6A0DAD" />
                 <Text style={styles.stateText}>Cargando pasos...</Text>
               </View>
             ) : error ? (
@@ -175,7 +175,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   safeArea: {
     flex: 1,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#16202C',
-    backgroundColor: '#080D13',
+    backgroundColor: '#FFFFFF',
   },
   backButton: {
     width: 40,
@@ -195,17 +195,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#101822',
+    backgroundColor: '#F6F2F7',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
   },
   backIcon: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 34,
     lineHeight: 36,
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 17,
     fontWeight: '800',
     marginLeft: 12,
@@ -224,9 +224,9 @@ const styles = StyleSheet.create({
   panel: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 16,
     justifyContent: 'space-between',
   },
@@ -236,11 +236,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     borderRadius: 8,
-    backgroundColor: '#101822',
+    backgroundColor: '#F6F2F7',
     padding: 18,
   },
   stateText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   stepCounter: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 13,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   stepText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '700',
     lineHeight: 26,
@@ -285,15 +285,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2A3342',
-    backgroundColor: '#151D28',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
     paddingHorizontal: 10,
   },
   listenButtonPressed: {
     opacity: 0.82,
   },
   listenButtonText: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '900',
   },
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     width: 22,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   actions: {
     flexDirection: 'row',
@@ -327,14 +327,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#101822',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F6F2F7',
   },
   stepButtonDisabled: {
     opacity: 0.42,
   },
   stepButtonText: {
-    color: '#D9DEEA',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
   },
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   primaryButtonText: {
     color: '#FFFFFF',

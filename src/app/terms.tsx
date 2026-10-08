@@ -41,7 +41,7 @@ export default function TermsScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="Volver" onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Términos de uso</Text>
@@ -53,12 +53,12 @@ export default function TermsScreen() {
 
         {isLoading ? (
           <View style={styles.statePanel}>
-            <ActivityIndicator color="#8D5BFF" />
+            <ActivityIndicator color="#6A0DAD" />
             <Text style={styles.stateText}>Cargando términos...</Text>
           </View>
         ) : error ? (
           <View style={styles.statePanel}>
-            <MaterialCommunityIcons color="#7F8A9B" name="file-alert-outline" size={38} />
+            <MaterialCommunityIcons color="#6F5873" name="file-alert-outline" size={38} />
             <Text style={styles.errorTitle}>{error}</Text>
             <Pressable accessibilityLabel="Reintentar" onPress={loadTerms} style={styles.retryButton}>
               <Text style={styles.retryButtonText}>Reintentar</Text>
@@ -79,7 +79,7 @@ export default function TermsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -108,19 +108,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '800',
     marginTop: 2,
@@ -131,20 +131,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   content: {
     paddingBottom: 18,
   },
   termsPanel: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: 'rgba(12, 17, 24, 0.94)',
+    backgroundColor: '#FFFFFF',
     padding: 14,
   },
   termsText: {
-    color: '#D9DEEA',
+    color: '#3C1642',
     fontSize: 13,
     lineHeight: 20,
     fontWeight: '700',
@@ -157,12 +157,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   stateText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '700',
   },
   errorTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '900',
     textAlign: 'center',
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
     paddingHorizontal: 16,
   },
   retryButtonText: {

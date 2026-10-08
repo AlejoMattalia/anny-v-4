@@ -1,211 +1,121 @@
-import {
-  getConnectedAnnyGlasses,
-  writeGlassesCommand,
-} from '@/lib/bluetooth-glasses';
-import { getActiveGlassesNetwork } from '@/lib/glasses-networks';
+import { io, type Socket } from 'socket.io-client';
+import { normalizeStreamingCurrency } from '../services/StreamingResponse';
+import { STREAMING_MODES, type StreamingMode } from '../services/StreamingModes';
 
-export const glassesStreamingApiUrl =
-  process.env.EXPO_PUBLIC_APP_API_URL_GLASSES?.replace(/\/$/, '') ?? '';
-
+// Same Socket.IO service and default mode as anny-app-v3/RealtimeStreaming.
+// Image scanning keeps its separate Elastic Beanstalk REST service.
 export const realtimeAiUrl =
-  process.env.EXPO_PUBLIC_REALTIME_AI_URL?.replace(/\/$/, '') ?? '';
+  process.env.EXPO_PUBLIC_REALTIME_AI_URL?.replace(/\/$/, '') ||
+  'http://ec2-3-15-63-191.us-east-2.compute.amazonaws.com';
+let mode: StreamingMode = 'viaje';
+let modeVersion = 0;
+const pending = new Set<() => void>();
+let socket: Socket | null = null;
+let nextRequestId = Date.now();
 
-export type GlassesStreamingSession = {
-  code: string;
-  deviceId: string;
-  port: number;
-};
+type Description = { text?: string; mode?: string; requestId?: number };
+type VisionError = { message?: string; requestId?: number };
 
-type SceneAnalysisResponse = {
-  description?: string;
-  error?: string;
-  tts?: string;
-};
-
-type StartStreamingResponse = {
-  message?: string;
-  port?: number;
-  reservation_code?: string;
-  status?: boolean;
-};
-
-export async function startGlassesStreaming(): Promise<GlassesStreamingSession> {
-  if (!glassesStreamingApiUrl) {
-    throw new Error('Falta configurar el servidor de streaming de los lentes.');
+function getSocket() {
+  if (!socket) {
+    socket = io(realtimeAiUrl, {
+      autoConnect: false,
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionAttempts: 10,
+    });
+    const activeSocket = socket;
+    activeSocket.on('connect', () => activeSocket.emit('set_mode', { mode }));
   }
-
-  const device = await getConnectedAnnyGlasses();
-  if (!device) {
-    throw new Error('Conectá los lentes Anny por Bluetooth para usar su cámara.');
-  }
-
-  const network = await getActiveGlassesNetwork();
-  if (!network || network.deviceId !== device.id) {
-    throw new Error('Conectá los lentes a WiFi o Hotspot antes de iniciar el streaming.');
-  }
-
-  const response = await fetchWithTimeout(
-    `${glassesStreamingApiUrl}/start_streaming_listening`,
-    {
-      body: JSON.stringify({ show_detection: false }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    },
-    10000,
-  );
-
-  if (!response.ok) {
-    throw new Error(`El servidor de lentes no respondió (${response.status}).`);
-  }
-
-  const data = (await response.json()) as StartStreamingResponse;
-  const port = Number(data.port);
-  const code = data.reservation_code?.trim() ?? '';
-
-  if (!data.status || !Number.isInteger(port) || port <= 0 || !code) {
-    throw new Error(data.message || 'No se pudo reservar el streaming de los lentes.');
-  }
-
-  try {
-    const host = new URL(glassesStreamingApiUrl).hostname;
-    await writeGlassesCommand(device.id, '<stop_stream');
-    await wait(500);
-    await writeGlassesCommand(device.id, `<start_stream:${host}:${port}`);
-    await writeGlassesCommand(device.id, '<resolution:1');
-  } catch (error) {
-    await releaseStreamingReservation(port, code);
-    throw error;
-  }
-
-  return { code, deviceId: device.id, port };
+  return socket;
 }
 
-export async function stopGlassesStreaming(
-  session: GlassesStreamingSession | null,
-) {
-  if (!session) return;
-
-  await Promise.allSettled([
-    writeGlassesCommand(session.deviceId, '<stop_stream'),
-    releaseStreamingReservation(session.port, session.code),
-  ]);
-}
-
-export function getGlassesVideoUrl(session: GlassesStreamingSession) {
-  return `${glassesStreamingApiUrl}/video_feed/${session.port}/${session.code}`;
-}
-
-export function getGlassesCaptureUrl(session: GlassesStreamingSession) {
-  return `${glassesStreamingApiUrl}/capture/${session.port}/${session.code}`;
+async function connect(activeSocket: Socket) {
+  if (activeSocket.connected) return;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => finish(new Error('No se pudo conectar con Anny.')), 10000);
+    const onConnect = () => finish();
+    const onError = () => finish(new Error('No se pudo conectar con Anny.'));
+    function finish(error?: Error) {
+      clearTimeout(timer);
+      activeSocket.off('connect', onConnect);
+      activeSocket.off('connect_error', onError);
+      activeSocket.off('disconnect', onError);
+      if (error) reject(error);
+      else resolve();
+    }
+    activeSocket.once('connect', onConnect);
+    activeSocket.once('connect_error', onError);
+    activeSocket.once('disconnect', onError);
+    activeSocket.connect();
+  });
 }
 
 export async function checkRealtimeAiHealth() {
-  if (!realtimeAiUrl) return false;
   try {
-    const response = await fetchWithTimeout(`${realtimeAiUrl}/health`, {}, 8000);
-    return response.ok;
+    await connect(getSocket());
+    return true;
   } catch {
     return false;
   }
 }
 
-export async function analyzeRealtimeImage(imageDataUrl: string, query?: string) {
-  if (!realtimeAiUrl) {
-    throw new Error('Falta configurar el servidor de inteligencia artificial.');
-  }
+export async function analyzeRealtimeImage(image: string, query?: string) {
+  const requestMode = mode;
+  const version = modeVersion;
+  const activeSocket = getSocket();
+  await connect(activeSocket);
+  if (version !== modeVersion) throw new Error('Análisis cancelado por cambio de modo.');
+  const requestId = ++nextRequestId;
+  const requestedQuery = query?.trim();
+  const queryToSend = requestedQuery
+    ? `${requestedQuery} Respondé en una frase breve y completa, de hasta 20 palabras.`
+    : STREAMING_MODES[requestMode].query;
+  const groundedQuery = `${queryToSend} Basate solo en lo visible: identificá objetos concretos y su posición relativa. No inventes textos, precios ni distancias; si un detalle no se distingue, indicá que no es legible.`;
 
-  const match = imageDataUrl.match(/^data:(image\/(?:jpeg|png));base64,(.+)$/s);
-  if (!match) throw new Error('El formato de la imagen no es válido.');
-
-  const contentType = match[1];
-  const imageBytes = decodeBase64(match[2]);
-  const boundary = `anny-frame-${Date.now().toString(16)}`;
-  const mode = query && /peligro|segur|riesgo|obstáculo/i.test(query)
-    ? 'seguridad'
-    : 'general';
-  const prefix = encodeUtf8(
-    `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="image"; filename="frame.${contentType === 'image/png' ? 'png' : 'jpg'}"\r\n` +
-      `Content-Type: ${contentType}\r\n\r\n`,
-  );
-  const fields = encodeUtf8(
-    `\r\n--${boundary}\r\n` +
-      'Content-Disposition: form-data; name="lang"\r\n\r\n' +
-      'es\r\n' +
-      `--${boundary}\r\n` +
-      'Content-Disposition: form-data; name="mode"\r\n\r\n' +
-      `${mode}\r\n` +
-      `--${boundary}--\r\n`,
-  );
-  const body = new Uint8Array(prefix.length + imageBytes.length + fields.length);
-  body.set(prefix, 0);
-  body.set(imageBytes, prefix.length);
-  body.set(fields, prefix.length + imageBytes.length);
-
-  const response = await fetchWithTimeout(
-    `${realtimeAiUrl}/v1/images/describe`,
-    {
-      body: body.buffer,
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      method: 'POST',
-    },
-    35000,
-  );
-  const data = (await response.json()) as SceneAnalysisResponse;
-  if (!response.ok) {
-    throw new Error(data.error || `El servicio de visión respondió ${response.status}.`);
-  }
-
-  const text = data.tts?.trim() || data.description?.trim();
-  if (!text) throw new Error('El servicio de visión no devolvió una descripción.');
-  return text;
+  return new Promise<string>((resolve, reject) => {
+    const cancel = () => finish(new Error('Análisis cancelado por cambio de modo.'));
+    const timer = setTimeout(() => finish(new Error('Anny tardó demasiado en responder.')), 30000);
+    const onDescription = (payload: Description) => {
+      if ((payload.requestId !== undefined && payload.requestId !== requestId) ||
+          (payload.mode !== undefined && payload.mode !== requestMode)) return;
+      const text = payload.text?.trim();
+      if (!text) finish(new Error('Anny no devolvió una descripción.'));
+      else finish(undefined, normalizeStreamingCurrency(text));
+    };
+    const onError = (payload: VisionError) => {
+      if (payload.requestId !== undefined && payload.requestId !== requestId) return;
+      finish(new Error(payload.message || 'No se pudo analizar la escena.'));
+    };
+    const onDisconnect = () => finish(new Error('Se perdió la conexión con Anny.'));
+    function finish(error?: Error, text?: string) {
+      pending.delete(cancel);
+      clearTimeout(timer);
+      activeSocket.off('description', onDescription);
+      activeSocket.off('error', onError);
+      activeSocket.off('disconnect', onDisconnect);
+      if (error) reject(error);
+      else resolve(text!);
+    }
+    activeSocket.on('description', onDescription);
+    activeSocket.on('error', onError);
+    activeSocket.on('disconnect', onDisconnect);
+    pending.add(cancel);
+    activeSocket.emit('analyze', { image, query: groundedQuery, mode: requestMode, requestId });
+  });
 }
 
-async function releaseStreamingReservation(port: number, code: string) {
-  if (!glassesStreamingApiUrl) return;
-
-  try {
-    await fetchWithTimeout(
-      `${glassesStreamingApiUrl}/stop_streaming_listening`,
-      {
-        body: JSON.stringify({ port, code }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      },
-      6000,
-    );
-  } catch {
-    // The Bluetooth stop command still closes the stream on the glasses.
-  }
+export function setRealtimeMode(nextMode: StreamingMode) {
+  modeVersion += 1;
+  mode = nextMode;
+  pending.forEach(cancel => cancel());
+  if (socket?.connected) socket.emit('set_mode', { mode });
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function decodeBase64(base64: string) {
-  const binary = globalThis.atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
-
-function encodeUtf8(value: string) {
-  return new TextEncoder().encode(value);
-}
-
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number,
-) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
+export function disconnectRealtimeAi() {
+  modeVersion += 1;
+  socket?.disconnect();
+  socket = null;
+  mode = 'viaje';
 }

@@ -33,7 +33,13 @@ export function AnimatedSplashOverlay() {
     },
   });
 
-  const image = <Image contentFit="contain" style={styles.splashLogo} source={require('@/assets/images/logo-white.png')} />;
+  const image = (
+    <Image
+      contentFit="contain"
+      style={[styles.splashLogo, styles.splashLogoBrand]}
+      source={require('@/assets/images/logo-white.png')}
+    />
+  );
 
   return animate ? (
     <Animated.View
@@ -135,6 +141,9 @@ const styles = StyleSheet.create({
     width: 160,
     height: 82,
   },
+  splashLogoBrand: {
+    tintColor: '#3C1642',
+  },
   background: {
     borderRadius: 40,
     experimental_backgroundImage: `linear-gradient(180deg, #3C9FFE, #0274DF)`,
@@ -144,7 +153,7 @@ const styles = StyleSheet.create({
   },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,

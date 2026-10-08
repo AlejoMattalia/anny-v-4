@@ -153,7 +153,7 @@ export default function NearbyPlacesScreen() {
             } as unknown as Href)
           }
           style={styles.mapButton}>
-          <MaterialCommunityIcons color="#B18CFF" name="map-outline" size={20} />
+          <MaterialCommunityIcons color="#6A0DAD" name="map-outline" size={20} />
         </Pressable>
         <Pressable
           accessibilityLabel={`Elegir cómo ir hacia ${item.name}`}
@@ -176,7 +176,7 @@ export default function NearbyPlacesScreen() {
             accessibilityLabel="Volver a Explorar"
             onPress={() => router.back()}
             style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Lugares cercanos</Text>
@@ -215,7 +215,7 @@ export default function NearbyPlacesScreen() {
             keyExtractor={(item) => item.id}
             ListEmptyComponent={
               <View style={styles.centerState}>
-                <MaterialCommunityIcons color="#7F8A9B" name="map-marker-off-outline" size={46} />
+                <MaterialCommunityIcons color="#6F5873" name="map-marker-off-outline" size={46} />
                 <Text style={styles.stateTitle}>No encontramos lugares cercanos</Text>
                 <Text style={styles.stateDescription}>Deslizá hacia abajo para volver a buscar.</Text>
               </View>
@@ -250,7 +250,7 @@ export default function NearbyPlacesScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -279,21 +279,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0D141D',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
     gap: 2,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
   },
   headerBadge: {
@@ -313,9 +313,9 @@ const styles = StyleSheet.create({
   },
   placeCard: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 12,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     marginBottom: 10,
     padding: 12,
   },
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   placeName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     lineHeight: 19,
@@ -408,13 +408,13 @@ const styles = StyleSheet.create({
     padding: 26,
   },
   stateTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 16,
     fontWeight: '900',
     textAlign: 'center',
   },
   stateDescription: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 13,
     textAlign: 'center',
   },
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'center',

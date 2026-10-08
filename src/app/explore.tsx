@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -20,7 +20,7 @@ const actions = [
     label: 'Explorador de mapa',
     description: 'Buscar lugares y recorrer el mapa',
     route: '/map-explorer',
-    accent: '#8D5BFF',
+    accent: '#6A0DAD',
     background: 'rgba(141, 91, 255, 0.14)',
   },
   {
@@ -47,7 +47,7 @@ export default function ExploreScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="Volver al inicio" onPress={() => router.replace('/home')} style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <Text style={styles.title}>Explorar</Text>
           <View style={styles.headerBadge}>
@@ -55,7 +55,9 @@ export default function ExploreScreen() {
           </View>
         </View>
 
-        <View style={styles.actions}>
+        <ScrollView
+          contentContainerStyle={styles.actions}
+          showsVerticalScrollIndicator={false}>
           {actions.map((action) => (
             <Pressable
               accessibilityHint={action.description}
@@ -77,7 +79,7 @@ export default function ExploreScreen() {
               <Ionicons color={action.accent} name="chevron-forward" size={21} />
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -86,7 +88,7 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -116,12 +118,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   title: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
@@ -131,10 +133,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   actions: {
     gap: 10,
+    paddingBottom: 24,
   },
   actionRow: {
     minHeight: 72,
@@ -142,9 +145,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 11,
   },
   actionRowPressed: {
@@ -159,7 +162,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(141, 91, 255, 0.14)',
   },
   rowTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -169,7 +172,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   rowDescription: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     lineHeight: 17,
   },

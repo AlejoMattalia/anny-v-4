@@ -170,12 +170,12 @@ export default function ProfileScreen() {
         }}
         style={({ pressed }) => [styles.menuItem, item.soon ? styles.menuItemDisabled : null, pressed ? styles.pressed : null]}>
         <View style={[styles.menuIcon, item.soon ? styles.menuIconDisabled : null]}>
-          <MaterialCommunityIcons color={item.soon ? '#7F8A9B' : '#B18CFF'} name={item.icon} size={22} />
+          <MaterialCommunityIcons color={item.soon ? '#6F5873' : '#6A0DAD'} name={item.icon} size={22} />
         </View>
         <View style={styles.menuTextWrap}>
           <Text style={[styles.menuLabel, item.soon ? styles.menuLabelDisabled : null]}>{item.label}</Text>
         </View>
-        <Ionicons color={item.soon ? '#596474' : '#8D5BFF'} name="chevron-forward" size={20} />
+        <Ionicons color={item.soon ? '#596474' : '#6A0DAD'} name="chevron-forward" size={20} />
       </Pressable>
     );
   }
@@ -186,7 +186,7 @@ export default function ProfileScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="Volver al inicio" onPress={() => router.replace('/home')} style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Perfil</Text>
@@ -198,7 +198,7 @@ export default function ProfileScreen() {
 
         {isLoading ? (
           <View style={styles.statePanel}>
-            <ActivityIndicator color="#8D5BFF" />
+            <ActivityIndicator color="#6A0DAD" />
             <Text style={styles.stateText}>Cargando perfil...</Text>
           </View>
         ) : (
@@ -233,19 +233,19 @@ export default function ProfileScreen() {
 
         <View style={styles.bottomTabs}>
           <Pressable accessibilityLabel="Inicio" onPress={() => router.replace('/home')} style={styles.tabItem}>
-            <Ionicons color="#7F8A9B" name="home-outline" size={20} />
+            <Ionicons color="#6F5873" name="home-outline" size={20} />
             <Text style={styles.tabText}>Inicio</Text>
           </Pressable>
           <Pressable accessibilityLabel="Capacitaciones" onPress={() => router.push('/training' as Href)} style={styles.tabItem}>
-            <MaterialCommunityIcons color="#7F8A9B" name="school-outline" size={20} />
+            <MaterialCommunityIcons color="#6F5873" name="school-outline" size={20} />
             <Text style={styles.tabText}>Capacitaciones</Text>
           </Pressable>
           <Pressable accessibilityLabel="Contactos" onPress={() => router.push('/contacts' as Href)} style={styles.tabItem}>
-            <Ionicons color="#7F8A9B" name="call-outline" size={20} />
+            <Ionicons color="#6F5873" name="call-outline" size={20} />
             <Text style={styles.tabText}>Contactos</Text>
           </Pressable>
           <Pressable accessibilityLabel="Perfil" style={styles.tabItem}>
-            <Ionicons color="#8D5BFF" name="person-circle" size={20} />
+            <Ionicons color="#6A0DAD" name="person-circle" size={20} />
             <Text style={[styles.tabText, styles.tabActive]}>Perfil</Text>
           </Pressable>
         </View>
@@ -260,7 +260,7 @@ export default function ProfileScreen() {
               accessibilityLabel="Nombre o alias"
               onChangeText={setName}
               placeholder="Nombre o alias"
-              placeholderTextColor="#7F8A9B"
+              placeholderTextColor="#6F5873"
               style={styles.input}
               value={name}
             />
@@ -269,7 +269,7 @@ export default function ProfileScreen() {
               keyboardType="phone-pad"
               onChangeText={setPhone}
               placeholder="Número de teléfono"
-              placeholderTextColor="#7F8A9B"
+              placeholderTextColor="#6F5873"
               style={styles.input}
               value={phone}
             />
@@ -277,7 +277,7 @@ export default function ProfileScreen() {
               accessibilityLabel="Contraseña actual"
               onChangeText={setCurrentPassword}
               placeholder="Contraseña actual"
-              placeholderTextColor="#7F8A9B"
+              placeholderTextColor="#6F5873"
               secureTextEntry
               style={styles.input}
               value={currentPassword}
@@ -286,7 +286,7 @@ export default function ProfileScreen() {
               accessibilityLabel="Nueva contraseña"
               onChangeText={setPassword}
               placeholder="Nueva contraseña"
-              placeholderTextColor="#7F8A9B"
+              placeholderTextColor="#6F5873"
               secureTextEntry
               style={styles.input}
               value={password}
@@ -295,7 +295,7 @@ export default function ProfileScreen() {
               accessibilityLabel="Confirmar contraseña nueva"
               onChangeText={setConfirmPassword}
               placeholder="Confirmar contraseña nueva"
-              placeholderTextColor="#7F8A9B"
+              placeholderTextColor="#6F5873"
               secureTextEntry
               style={styles.input}
               value={confirmPassword}
@@ -321,7 +321,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -350,19 +350,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '800',
     marginTop: 2,
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   content: {
     paddingBottom: 18,
@@ -384,9 +384,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: 'rgba(12, 17, 24, 0.94)',
+    backgroundColor: '#FFFFFF',
     padding: 12,
     marginBottom: 16,
   },
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 27,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   avatarText: {
     color: '#FFFFFF',
@@ -408,18 +408,18 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   profileName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
     marginBottom: 4,
   },
   profileEmail: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '700',
   },
   profileCode: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 11,
     fontWeight: '800',
     marginTop: 5,
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -440,9 +440,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 11,
     paddingVertical: 9,
     marginBottom: 9,
@@ -462,23 +462,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(141, 91, 255, 0.14)',
   },
   menuIconDisabled: {
-    backgroundColor: '#151D28',
+    backgroundColor: '#F2EDF3',
   },
   menuTextWrap: {
     flex: 1,
     minWidth: 0,
   },
   menuLabel: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     marginBottom: 3,
   },
   menuLabelDisabled: {
-    color: '#AEB7C7',
+    color: '#5B465F',
   },
   menuMeta: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '800',
   },
@@ -489,11 +489,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderRadius: 8,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
     marginTop: 2,
   },
   logoutText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   stateText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -514,8 +514,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderTopColor: '#1D2633',
-    backgroundColor: 'rgba(5, 7, 11, 0.96)',
+    borderTopColor: '#DED5E0',
+    backgroundColor: '#FFFFFF',
     marginHorizontal: -14,
     paddingHorizontal: 10,
     paddingTop: 5,
@@ -527,12 +527,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   tabText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '800',
   },
   tabActive: {
-    color: '#8D5BFF',
+    color: '#6A0DAD',
   },
   modalLayer: {
     flex: 1,
@@ -544,19 +544,19 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 14,
   },
   modalTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
     marginBottom: 4,
   },
   modalSubtitle: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700',
@@ -565,10 +565,10 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 42,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#101721',
-    color: '#FFFFFF',
+    backgroundColor: '#F6F2F7',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '700',
     paddingHorizontal: 12,
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
     marginTop: 3,
   },
   disabledButton: {
@@ -596,12 +596,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2A3342',
-    backgroundColor: '#101721',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F6F2F7',
     marginTop: 8,
   },
   cancelButtonText: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 13,
     fontWeight: '900',
   },

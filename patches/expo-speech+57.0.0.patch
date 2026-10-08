@@ -1,0 +1,53 @@
+diff --git a/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt b/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt
+index 9ca869c..be6ffdb 100644
+--- a/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt
++++ b/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt
+@@ -36,8 +36,10 @@ class SpeechModule : Module() {
+       TextToSpeech.getMaxSpeechInputLength()
+     }
+ 
+-    OnActivityDestroys {
+-      textToSpeech.shutdown()
++    // React/HeadlessJS can outlive MainActivity. Keep TTS usable when it reopens.
++    OnDestroy {
++      _textToSpeech?.shutdown()
++      _ttsReady = false
+     }
+ 
+     AsyncFunction<Boolean>("isSpeaking") {
+@@ -56,7 +58,8 @@ class SpeechModule : Module() {
+     }
+ 
+     AsyncFunction<Unit>("stop") {
+-      textToSpeech.stop()
++      if (isTextToSpeechReady) _textToSpeech?.stop()
++      delayedUtterances.clear()
+     }
+ 
+     AsyncFunction("speak") { id: String, text: String, options: SpeechOptions ->
+@@ -104,7 +107,7 @@ class SpeechModule : Module() {
+     options.rate?.let(textToSpeech::setSpeechRate)
+ 
+     textToSpeech.language = options.language?.let {
+-      val locale = Locale(it)
++      val locale = Locale.forLanguageTag(it)
+       val languageAvailable = textToSpeech.isLanguageAvailable(locale)
+ 
+       return@let if (
+@@ -130,12 +133,15 @@ class SpeechModule : Module() {
+       }
+     }
+ 
+-    textToSpeech.speak(
++    val result = textToSpeech.speak(
+       text,
+       TextToSpeech.QUEUE_ADD,
+       params,
+       id
+     )
++    if (result == TextToSpeech.ERROR) {
++      sendEvent(speakingErrorEvent, idToMap(id))
++    }
+   }
+ 
+   // TextToSpeech object related code

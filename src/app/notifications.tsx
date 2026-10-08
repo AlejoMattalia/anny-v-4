@@ -172,7 +172,7 @@ export default function NotificationsScreen() {
             accessibilityLabel="Volver al perfil"
             onPress={goBack}
             style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Notificaciones</Text>
@@ -234,7 +234,7 @@ export default function NotificationsScreen() {
               onPress={() => toggleDestinationAlerts(!destinationAlertsEnabled)}
               style={styles.settingRow}>
               <View style={styles.rowIcon}>
-                <MaterialCommunityIcons color="#B18CFF" name="map-marker-alert-outline" size={22} />
+                <MaterialCommunityIcons color="#6A0DAD" name="map-marker-alert-outline" size={22} />
               </View>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>Aviso anticipado de destino</Text>
@@ -246,7 +246,7 @@ export default function NotificationsScreen() {
                 accessibilityLabel="Activar aviso anticipado de destino"
                 onValueChange={toggleDestinationAlerts}
                 thumbColor="#FFFFFF"
-                trackColor={{ false: '#263244', true: '#5A2371' }}
+                trackColor={{ false: '#DED5E0', true: '#3C1642' }}
                 value={destinationAlertsEnabled}
               />
             </Pressable>
@@ -283,7 +283,7 @@ export default function NotificationsScreen() {
                 })}
               </View>
               <View style={styles.selectionSummary}>
-                <MaterialCommunityIcons color="#B18CFF" name="volume-high" size={17} />
+                <MaterialCommunityIcons color="#6A0DAD" name="volume-high" size={17} />
                 <Text style={styles.selectionSummaryText}>
                   Aviso seleccionado: {notificationDistance} metros antes
                 </Text>
@@ -303,14 +303,14 @@ export default function NotificationsScreen() {
                 !canTest ? styles.testButtonDisabled : null,
                 pressed ? styles.pressed : null,
               ]}>
-              <MaterialCommunityIcons color={canTest ? '#B18CFF' : '#596474'} name="bell-ring-outline" size={20} />
+              <MaterialCommunityIcons color={canTest ? '#6A0DAD' : '#596474'} name="bell-ring-outline" size={20} />
               <View style={styles.rowText}>
                 <Text style={[styles.testTitle, !canTest ? styles.testTitleDisabled : null]}>
                   {isTesting ? 'Preparando prueba...' : 'Enviar notificación de prueba'}
                 </Text>
                 <Text style={styles.rowDescription}>Llegará en aproximadamente 2 segundos.</Text>
               </View>
-              <Ionicons color={canTest ? '#8D5BFF' : '#596474'} name="chevron-forward" size={20} />
+              <Ionicons color={canTest ? '#6A0DAD' : '#596474'} name="chevron-forward" size={20} />
             </Pressable>
           </View>
 
@@ -329,7 +329,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -358,14 +358,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   content: {
     paddingBottom: 24,
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252E3B',
     borderRadius: 12,
-    backgroundColor: 'rgba(12, 17, 24, 0.96)',
+    backgroundColor: '#FFFFFF',
     padding: 14,
     marginBottom: 18,
   },
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statusEyebrow: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 11,
     fontWeight: '800',
     marginBottom: 5,
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   statusDescription: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '700',
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
     borderRadius: 8,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   permissionButtonText: {
     color: '#FFFFFF',
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   sectionTitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -461,9 +461,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 11,
     paddingVertical: 9,
     marginBottom: 9,
@@ -481,12 +481,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   rowTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
   rowDescription: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     lineHeight: 14,
     fontWeight: '800',
@@ -494,18 +494,18 @@ const styles = StyleSheet.create({
   },
   distanceCard: {
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 14,
   },
   distanceTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
   distanceDescription: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     lineHeight: 16,
     fontWeight: '700',
@@ -522,21 +522,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2A3342',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#101721',
+    backgroundColor: '#F6F2F7',
   },
   distanceOptionSelected: {
-    borderColor: '#8D5BFF',
-    backgroundColor: '#5A2371',
+    borderColor: '#6A0DAD',
+    backgroundColor: '#3C1642',
   },
   distanceValue: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 13,
     fontWeight: '900',
   },
   distanceUnit: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 9,
     fontWeight: '800',
     marginTop: 1,
@@ -566,21 +566,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#2A3342',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#101721',
+    backgroundColor: '#F6F2F7',
     paddingHorizontal: 12,
   },
   testButtonDisabled: {
     opacity: 0.62,
   },
   testTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
   testTitleDisabled: {
-    color: '#AEB7C7',
+    color: '#5B465F',
   },
   infoCard: {
     flexDirection: 'row',

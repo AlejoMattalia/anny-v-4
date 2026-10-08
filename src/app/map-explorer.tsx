@@ -233,11 +233,11 @@ export default function MapExplorerScreen() {
             accessibilityLabel="Volver a Explorar"
             onPress={() => router.back()}
             style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <Text style={styles.title}>Explorador de mapa</Text>
           {isLocating ? (
-            <ActivityIndicator color="#8D5BFF" size="small" />
+            <ActivityIndicator color="#6A0DAD" size="small" />
           ) : (
             <View style={styles.headerBadge}>
               <MaterialCommunityIcons color="#FFFFFF" name="map-search-outline" size={21} />
@@ -246,7 +246,7 @@ export default function MapExplorerScreen() {
         </View>
 
         <View style={styles.searchShell}>
-          <Ionicons color="#8D5BFF" name="search" size={20} />
+          <Ionicons color="#6A0DAD" name="search" size={20} />
           <TextInput
             accessibilityLabel="Buscar un lugar en el mapa"
             autoCorrect={false}
@@ -257,7 +257,7 @@ export default function MapExplorerScreen() {
             style={styles.searchInput}
             value={query}
           />
-          {isSearching ? <ActivityIndicator color="#8D5BFF" size="small" /> : null}
+          {isSearching ? <ActivityIndicator color="#6A0DAD" size="small" /> : null}
           {query ? (
             <Pressable
               accessibilityLabel="Limpiar búsqueda"
@@ -266,7 +266,7 @@ export default function MapExplorerScreen() {
                 setResults([]);
                 setSelectedPlace(null);
               }}>
-              <Ionicons color="#7F8A9B" name="close-circle" size={20} />
+              <Ionicons color="#6F5873" name="close-circle" size={20} />
             </Pressable>
           ) : null}
         </View>
@@ -281,7 +281,7 @@ export default function MapExplorerScreen() {
                 accessibilityLabel={`${item.name}. ${item.address}`}
                 onPress={() => selectSearchResult(item)}
                 style={styles.resultRow}>
-                <MaterialCommunityIcons color="#B18CFF" name="map-marker-outline" size={20} />
+                <MaterialCommunityIcons color="#6A0DAD" name="map-marker-outline" size={20} />
                 <View style={styles.resultText}>
                   <Text numberOfLines={1} style={styles.resultName}>{item.name}</Text>
                   <Text numberOfLines={1} style={styles.resultAddress}>{item.address}</Text>
@@ -354,7 +354,7 @@ export default function MapExplorerScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   safeArea: {
     flex: 1,
@@ -373,13 +373,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0D141D',
+    backgroundColor: '#F2EDF3',
   },
   title: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '900',
   },
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 19,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   searchShell: {
     minHeight: 50,
@@ -399,14 +399,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#283445',
     borderRadius: 10,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     marginHorizontal: 14,
     marginBottom: 8,
     paddingHorizontal: 12,
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     paddingVertical: 11,
   },
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#283445',
     borderRadius: 10,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
   },
   resultRow: {
     minHeight: 61,
@@ -436,12 +436,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   resultName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '900',
   },
   resultAddress: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
   },
   errorBanner: {
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     borderTopWidth: 1,
-    borderTopColor: '#1D2633',
+    borderTopColor: '#DED5E0',
   },
   recenterButton: {
     position: 'absolute',
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 24,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#352A55',
     borderRadius: 12,
-    backgroundColor: '#10151E',
+    backgroundColor: '#F2EDF3',
     padding: 12,
   },
   selectedText: {
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   selectedName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },

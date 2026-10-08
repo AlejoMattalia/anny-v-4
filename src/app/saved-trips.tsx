@@ -104,7 +104,7 @@ export default function SavedTripsScreen() {
             onPress={() => router.replace('/travel')}
             style={styles.backButton}
           >
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Viajes guardados</Text>
@@ -129,7 +129,7 @@ export default function SavedTripsScreen() {
                 style={styles.cardPressable}
               >
                 <View style={styles.cardIconBg}>
-                  <MaterialCommunityIcons color="#B18CFF" name="routes" size={22} />
+                  <MaterialCommunityIcons color="#6A0DAD" name="routes" size={22} />
                 </View>
                 <View style={styles.cardContent}>
                   <Text style={styles.cardTitle}>{item.title}</Text>
@@ -140,7 +140,7 @@ export default function SavedTripsScreen() {
                     </Text>
                   </View>
                   <View style={styles.cardStep}>
-                    <Ionicons color="#8D5BFF" name="flag-outline" size={12} />
+                    <Ionicons color="#6A0DAD" name="flag-outline" size={12} />
                     <Text numberOfLines={1} style={styles.cardStepText}>
                       Destino: {item.destination.name}
                     </Text>
@@ -212,7 +212,7 @@ export default function SavedTripsScreen() {
               </View>
 
               <View style={styles.modalDetailRow}>
-                <Ionicons color="#8D5BFF" name="flag-outline" size={18} />
+                <Ionicons color="#6A0DAD" name="flag-outline" size={18} />
                 <View style={styles.modalDetailText}>
                   <Text style={styles.modalDetailLabel}>Destino</Text>
                   <Text style={styles.modalDetailValue}>{selectedJourney.destination.name}</Text>
@@ -240,7 +240,7 @@ export default function SavedTripsScreen() {
                       ]}
                     >
                       <Ionicons
-                        color={isSelected ? '#FFFFFF' : '#7F8A9B'}
+                        color={isSelected ? '#FFFFFF' : '#6F5873'}
                         name={mode.icon}
                         size={18}
                       />
@@ -278,7 +278,7 @@ export default function SavedTripsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -317,19 +317,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '800',
     marginTop: 2,
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#B18CFF',
+    backgroundColor: '#6A0DAD',
   },
   listContainer: {
     paddingBottom: 20,
@@ -350,9 +350,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 12,
   },
   cardPressable: {
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardStepText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '700',
     flex: 1,
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '900',
     marginTop: 16,
@@ -424,12 +424,12 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 18,
     borderRadius: 22,
-    backgroundColor: '#B18CFF',
+    backgroundColor: '#6A0DAD',
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyActionText: {
-    color: '#05070B',
+    color: '#FCFCFC',
     fontSize: 13,
     fontWeight: '900',
   },
@@ -444,9 +444,9 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000000',
@@ -455,13 +455,13 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   modalTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '950',
     marginBottom: 4,
   },
   modalLabel: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -476,13 +476,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalDetailLabel: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   modalDetailValue: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     marginTop: 2,
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   travelModeLabel: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     fontWeight: '900',
     marginBottom: 8,
@@ -508,20 +508,20 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 42,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 10,
-    backgroundColor: '#101721',
+    backgroundColor: '#F6F2F7',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
     paddingHorizontal: 4,
   },
   travelModeButtonSelected: {
-    borderColor: '#6A29FF',
-    backgroundColor: '#6A29FF',
+    borderColor: '#6A0DAD',
+    backgroundColor: '#6A0DAD',
   },
   travelModeButtonText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '900',
   },
@@ -545,15 +545,15 @@ const styles = StyleSheet.create({
   modalBtnCancel: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
   },
   modalBtnCancelText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 13,
     fontWeight: '900',
   },
   modalBtnConfirm: {
-    backgroundColor: '#B18CFF',
+    backgroundColor: '#6A0DAD',
   },
   modalBtnConfirmText: {
     color: '#FFFFFF',

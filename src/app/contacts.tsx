@@ -179,7 +179,7 @@ export default function ContactsScreen() {
             accessibilityLabel={isFavorite ? `Quitar ${item.name} de favoritos` : `Agregar ${item.name} a favoritos`}
             onPress={() => toggleFavorite(item)}
             style={styles.iconButton}>
-            <Ionicons color={isFavorite ? '#E64D6A' : '#7F8A9B'} name={isFavorite ? 'heart' : 'heart-outline'} size={20} />
+            <Ionicons color={isFavorite ? '#E64D6A' : '#6F5873'} name={isFavorite ? 'heart' : 'heart-outline'} size={20} />
           </Pressable>
           <Pressable accessibilityLabel={`Llamar a ${item.name}`} onPress={() => callContact(item)} style={styles.callButton}>
             <Ionicons color="#FFFFFF" name="call" size={19} />
@@ -195,7 +195,7 @@ export default function ContactsScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="Volver al inicio" onPress={() => router.replace('/home')} style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Contactos</Text>
@@ -206,7 +206,7 @@ export default function ContactsScreen() {
         </View>
 
         <View style={styles.summaryPanel}>
-          <MaterialCommunityIcons color="#8D5BFF" name="account-group-outline" size={24} />
+          <MaterialCommunityIcons color="#6A0DAD" name="account-group-outline" size={24} />
           <View style={styles.summaryTextWrap}>
             <Text style={styles.summaryTitle}>{contacts.length} contactos</Text>
           </View>
@@ -214,7 +214,7 @@ export default function ContactsScreen() {
 
         {isLoading ? (
           <View style={styles.statePanel}>
-            <ActivityIndicator color="#8D5BFF" />
+            <ActivityIndicator color="#6A0DAD" />
             <Text style={styles.stateText}>Cargando contactos...</Text>
           </View>
         ) : contacts.length ? (
@@ -227,7 +227,7 @@ export default function ContactsScreen() {
           />
         ) : (
           <View style={styles.statePanel}>
-            <MaterialCommunityIcons color="#7F8A9B" name="contacts-outline" size={36} />
+            <MaterialCommunityIcons color="#6F5873" name="contacts-outline" size={36} />
             <Text style={styles.emptyTitle}>{permissionDenied ? 'Permiso pendiente' : 'Sin contactos'}</Text>
             <Text style={styles.stateText}>
               {permissionDenied
@@ -239,7 +239,7 @@ export default function ContactsScreen() {
             </Pressable>
             {permissionDenied ? (
               <Pressable accessibilityLabel="Abrir ajustes de la app" onPress={openContactSettings} style={styles.settingsButton}>
-                <MaterialCommunityIcons color="#B18CFF" name="cog-outline" size={18} />
+                <MaterialCommunityIcons color="#6A0DAD" name="cog-outline" size={18} />
                 <Text style={styles.settingsButtonText}>Abrir ajustes</Text>
               </Pressable>
             ) : null}
@@ -248,19 +248,19 @@ export default function ContactsScreen() {
 
         <View style={styles.bottomTabs}>
           <Pressable accessibilityLabel="Inicio" onPress={() => router.replace('/home')} style={styles.tabItem}>
-            <Ionicons color="#7F8A9B" name="home-outline" size={20} />
+            <Ionicons color="#6F5873" name="home-outline" size={20} />
             <Text style={styles.tabText}>Inicio</Text>
           </Pressable>
           <Pressable accessibilityLabel="Capacitaciones" onPress={() => router.push('/training' as Href)} style={styles.tabItem}>
-            <MaterialCommunityIcons color="#7F8A9B" name="school-outline" size={20} />
+            <MaterialCommunityIcons color="#6F5873" name="school-outline" size={20} />
             <Text style={styles.tabText}>Capacitaciones</Text>
           </Pressable>
           <Pressable accessibilityLabel="Contactos" style={styles.tabItem}>
-            <Ionicons color="#8D5BFF" name="call" size={20} />
+            <Ionicons color="#6A0DAD" name="call" size={20} />
             <Text style={[styles.tabText, styles.tabActive]}>Contactos</Text>
           </Pressable>
           <Pressable accessibilityLabel="Perfil" style={styles.tabItem}>
-            <Ionicons color="#7F8A9B" name="person-circle-outline" size={20} />
+            <Ionicons color="#6F5873" name="person-circle-outline" size={20} />
             <Text style={styles.tabText}>Perfil</Text>
           </Pressable>
         </View>
@@ -272,7 +272,7 @@ export default function ContactsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -301,19 +301,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '800',
     marginTop: 2,
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   summaryPanel: {
     minHeight: 66,
@@ -332,9 +332,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: 'rgba(12, 17, 24, 0.94)',
+    backgroundColor: '#FFFFFF',
     padding: 12,
     marginBottom: 12,
   },
@@ -342,13 +342,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     marginBottom: 3,
   },
   summaryText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700',
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
   sectionTitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -369,9 +369,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
     paddingVertical: 9,
     marginBottom: 9,
@@ -389,9 +389,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 19,
-    backgroundColor: '#151D28',
+    backgroundColor: '#F2EDF3',
     borderWidth: 1,
-    borderColor: '#263244',
+    borderColor: '#DED5E0',
   },
   avatarText: {
     color: '#FFFFFF',
@@ -403,13 +403,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   contactName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
     marginBottom: 4,
   },
   contactPhone: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -426,8 +426,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#101721',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F6F2F7',
   },
   callButton: {
     width: 36,
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
   },
   statePanel: {
     flex: 1,
@@ -445,12 +445,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 16,
     fontWeight: '900',
   },
   stateText: {
-    color: '#AEB7C7',
+    color: '#5B465F',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '700',
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    backgroundColor: '#8D5BFF',
+    backgroundColor: '#6A0DAD',
     paddingHorizontal: 16,
     marginTop: 4,
   },
@@ -478,12 +478,12 @@ const styles = StyleSheet.create({
     gap: 7,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2A3342',
-    backgroundColor: '#101721',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F6F2F7',
     paddingHorizontal: 16,
   },
   settingsButtonText: {
-    color: '#B18CFF',
+    color: '#6A0DAD',
     fontSize: 12,
     fontWeight: '900',
   },
@@ -493,8 +493,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderTopColor: '#1D2633',
-    backgroundColor: 'rgba(5, 7, 11, 0.96)',
+    borderTopColor: '#DED5E0',
+    backgroundColor: '#FFFFFF',
     marginHorizontal: -14,
     paddingHorizontal: 10,
     paddingTop: 5,
@@ -506,11 +506,11 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   tabText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 10,
     fontWeight: '800',
   },
   tabActive: {
-    color: '#8D5BFF',
+    color: '#6A0DAD',
   },
 });

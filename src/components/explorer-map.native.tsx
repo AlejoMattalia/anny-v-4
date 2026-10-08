@@ -40,7 +40,7 @@ export default function ExplorerMap({
     <MapView
       initialRegion={toRegion(userLocation)}
       loadingEnabled
-      loadingIndicatorColor="#8D5BFF"
+      loadingIndicatorColor="#6A0DAD"
       mapPadding={{ top: 8, right: 8, bottom: 8, left: 8 }}
       provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
       ref={mapRef}
@@ -54,7 +54,7 @@ export default function ExplorerMap({
           description={marker.description}
           key={marker.id}
           onPress={() => onMarkerPress?.(marker)}
-          pinColor={marker.kind === 'search' ? '#8D5BFF' : '#208AEF'}
+          pinColor={marker.kind === 'search' ? '#6A0DAD' : '#208AEF'}
           title={marker.title}
         />
       ))}

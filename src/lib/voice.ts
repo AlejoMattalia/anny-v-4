@@ -11,11 +11,19 @@ type ListenOptions = {
 };
 
 let latestSpeechToken = 0;
+let spanishVoicePromise: Promise<Speech.Voice | undefined> | undefined;
 
-export async function speak(text: string) {
+export async function speak(text: string, options: { onError?: (error: Error) => void } = {}) {
   const speechToken = ++latestSpeechToken;
   await Speech.stop();
   const settings = await loadSettings();
+  spanishVoicePromise ??= Speech.getAvailableVoicesAsync().then((voices) => {
+    const spanish = voices.filter((voice) => /^es([_-]|$)/i.test(voice.language));
+    return spanish.find((voice) => /local/i.test(voice.identifier))
+      ?? spanish.find((voice) => /^es[-_]AR$/i.test(voice.language))
+      ?? spanish[0];
+  }).catch(() => undefined);
+  const voice = await spanishVoicePromise;
 
   if (speechToken !== latestSpeechToken) {
     return;
@@ -23,7 +31,7 @@ export async function speak(text: string) {
 
   await new Promise<void>((resolve) => {
     let settled = false;
-    const fallbackTimeout = setTimeout(() => finish(), Math.max(2500, text.length * 95));
+    const fallbackTimeout = setTimeout(() => finish(), Math.max(10000, text.length * 150 / (settings.voiceRate || 1)));
 
     function finish() {
       if (settled) {
@@ -36,12 +44,17 @@ export async function speak(text: string) {
     }
 
     Speech.speak(text, {
-      language: 'es-AR',
+      language: voice?.language ?? 'es',
+      voice: voice?.identifier,
+      useApplicationAudioSession: false,
       pitch: 1,
       rate: settings.voiceRate,
       onDone: finish,
       onStopped: finish,
-      onError: finish,
+      onError: (error) => {
+        options.onError?.(error);
+        finish();
+      },
     });
   });
 

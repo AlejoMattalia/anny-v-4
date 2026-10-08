@@ -143,7 +143,7 @@ export default function SavedLocationsScreen() {
             }}
             style={styles.backButton}
           >
-            <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+            <Ionicons color="#3C1642" name="chevron-back" size={24} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>Mis ubicaciones</Text>
@@ -245,7 +245,7 @@ export default function SavedLocationsScreen() {
                   }}
                   style={styles.searchClearBtn}
                 >
-                  <Ionicons color="#7F8A9B" name="close-circle" size={18} />
+                  <Ionicons color="#6F5873" name="close-circle" size={18} />
                 </Pressable>
               )}
             </View>
@@ -265,7 +265,7 @@ export default function SavedLocationsScreen() {
                 style={styles.resultsList}
                 renderItem={({ item }) => (
                   <Pressable onPress={() => handleSelectAddress(item)} style={styles.resultsItem}>
-                    <Ionicons color="#7F8A9B" name="location-outline" size={16} />
+                    <Ionicons color="#6F5873" name="location-outline" size={16} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.resultsName}>{item.name}</Text>
                       <Text numberOfLines={1} style={styles.resultsAddress}>
@@ -295,7 +295,7 @@ export default function SavedLocationsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -334,14 +334,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
@@ -367,9 +367,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     padding: 8,
     gap: 4,
   },
@@ -394,12 +394,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
   cardAddress: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 16,
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 15,
     fontWeight: '900',
     marginTop: 16,
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   formLabel: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '950',
     textTransform: 'uppercase',
@@ -448,11 +448,11 @@ const styles = StyleSheet.create({
   formInput: {
     height: 48,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -473,16 +473,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   loadingText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '700',
   },
   resultsList: {
     maxHeight: 200,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     marginTop: 4,
   },
   resultsItem: {
@@ -494,12 +494,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#121923',
   },
   resultsName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 13,
     fontWeight: '800',
   },
   resultsAddress: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
@@ -519,10 +519,10 @@ const styles = StyleSheet.create({
   btnCancel: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
   },
   btnCancelText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E9528A',
   },
   btnSaveText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },

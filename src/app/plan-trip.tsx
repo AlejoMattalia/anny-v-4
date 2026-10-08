@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { getCurrentLocation } from '@/lib/current-location';
 import { searchLocations } from '@/lib/location-search';
 import { getSavedLocations, LocationItem } from '@/lib/saved-locations';
 import { addSavedJourney } from '@/lib/saved-journeys';
@@ -90,36 +91,35 @@ export default function PlanTripScreen() {
   useEffect(() => {
     async function initializeLocation() {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const locationData = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          const currentItem: LocationItem = {
-            id: 'current',
-            name: GPS_ORIGIN_NAME,
-            address: GPS_ORIGIN_ADDRESS,
-            latitude: locationData.coords.latitude,
-            longitude: locationData.coords.longitude,
-          };
-          setGpsLocation(currentItem);
-          setOrigin(currentItem); // Default departure to current location
+        const locationData = await getCurrentLocation({
+          maxCachedAgeMs: 30_000,
+          maxCachedAccuracyMeters: 100,
+        });
+        const currentItem: LocationItem = {
+          id: 'current',
+          name: GPS_ORIGIN_NAME,
+          address: GPS_ORIGIN_ADDRESS,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+        };
+        setGpsLocation(currentItem);
+        setOrigin(currentItem); // Default departure to current location
 
-          const labels = await getLocationLabels(
-            currentItem.latitude,
-            currentItem.longitude,
+        const labels = await getLocationLabels(
+          currentItem.latitude,
+          currentItem.longitude,
+        );
+        if (labels) {
+          const locatedItem = { ...currentItem, ...labels };
+          setGpsLocation(locatedItem);
+          setOrigin((selectedOrigin) =>
+            selectedOrigin?.id === 'current' ? locatedItem : selectedOrigin,
           );
-          if (labels) {
-            const locatedItem = { ...currentItem, ...labels };
-            setGpsLocation(locatedItem);
-            setOrigin((selectedOrigin) =>
-              selectedOrigin?.id === 'current' ? locatedItem : selectedOrigin,
-            );
-          }
-        } else {
-          void speak('Permiso de ubicación denegado. Deberás ingresar el origen de manera manual.');
         }
       } catch (error) {
+        if (error instanceof Error && error.message.includes('permiso de ubicación')) {
+          void speak('Permiso de ubicación denegado. Deberás ingresar el origen de manera manual.');
+        }
         console.warn('Error al obtener la ubicación GPS:', error);
       }
     }
@@ -226,11 +226,12 @@ export default function PlanTripScreen() {
         let longitude = origin.longitude;
 
         try {
-          const currentPosition = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
+          const currentPosition = await getCurrentLocation({
+            maxCachedAgeMs: 30_000,
+            maxCachedAccuracyMeters: 100,
           });
-          latitude = currentPosition.coords.latitude;
-          longitude = currentPosition.coords.longitude;
+          latitude = currentPosition.latitude;
+          longitude = currentPosition.longitude;
         } catch (error) {
           console.warn('Se guardará la última posición GPS disponible:', error);
         }
@@ -314,7 +315,7 @@ export default function PlanTripScreen() {
                 onPress={() => router.replace('/travel')}
                 style={styles.backButton}
               >
-                <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+                <Ionicons color="#3C1642" name="chevron-back" size={24} />
               </Pressable>
               <View style={styles.headerText}>
                 <Text accessibilityRole="header" style={styles.title}>
@@ -359,7 +360,7 @@ export default function PlanTripScreen() {
                       onPress={() => handleClearLocation('origin')}
                       style={styles.clearButton}
                     >
-                      <Ionicons color="#7F8A9B" name="close-circle" size={20} />
+                      <Ionicons color="#6F5873" name="close-circle" size={20} />
                     </Pressable>
                   )}
                 </View>
@@ -376,7 +377,7 @@ export default function PlanTripScreen() {
                     onPress={() => handleOpenSearch('destination')}
                     style={styles.inputPressable}
                   >
-                    <Ionicons color="#8D5BFF" name="flag-outline" size={20} />
+                    <Ionicons color="#6A0DAD" name="flag-outline" size={20} />
                     <View style={styles.inputTextWrapper}>
                       <Text numberOfLines={1} style={destination ? styles.inputText : styles.inputPlaceholder}>
                         {destination ? destination.name : 'Escribe tu destino...'}
@@ -395,7 +396,7 @@ export default function PlanTripScreen() {
                       onPress={() => handleClearLocation('destination')}
                       style={styles.clearButton}
                     >
-                      <Ionicons color="#7F8A9B" name="close-circle" size={20} />
+                      <Ionicons color="#6F5873" name="close-circle" size={20} />
                     </Pressable>
                   )}
                 </View>
@@ -415,7 +416,7 @@ export default function PlanTripScreen() {
                         style={[styles.travelModeButton, isSelected && styles.travelModeButtonSelected]}
                       >
                         <Ionicons
-                          color={isSelected ? '#FFFFFF' : '#7F8A9B'}
+                          color={isSelected ? '#FFFFFF' : '#6F5873'}
                           name={mode.icon}
                           size={21}
                         />
@@ -483,7 +484,7 @@ export default function PlanTripScreen() {
                 onPress={() => setActiveSearch(null)}
                 style={styles.backButton}
               >
-                <Ionicons color="#FFFFFF" name="chevron-back" size={24} />
+                <Ionicons color="#3C1642" name="chevron-back" size={24} />
               </Pressable>
               <TextInput
                 accessibilityHint="Escribí al menos tres letras para buscar"
@@ -511,7 +512,7 @@ export default function PlanTripScreen() {
                   }}
                   style={styles.searchClearBtn}
                 >
-                  <Ionicons color="#D9DEEA" name="close-circle" size={20} />
+                  <Ionicons color="#3C1642" name="close-circle" size={20} />
                 </Pressable>
               )}
             </View>
@@ -550,9 +551,9 @@ export default function PlanTripScreen() {
                     {item.id === 'current' ? (
                       <Ionicons color="#208AEF" name="locate" size={18} />
                     ) : item.isSaved ? (
-                      <Ionicons color="#B18CFF" name="star" size={18} />
+                      <Ionicons color="#6A0DAD" name="star" size={18} />
                     ) : (
-                      <Ionicons color="#7F8A9B" name="map-marker-outline" size={18} />
+                      <Ionicons color="#6F5873" name="map-marker-outline" size={18} />
                     )}
                   </View>
                   <View style={styles.listItemTextWrapper}>
@@ -647,7 +648,7 @@ export default function PlanTripScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
   },
   topGlow: {
     position: 'absolute',
@@ -686,14 +687,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1D2633',
-    backgroundColor: '#0D141D',
+    borderColor: '#DED5E0',
+    backgroundColor: '#F2EDF3',
   },
   headerText: {
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 19,
     fontWeight: '900',
   },
@@ -720,7 +721,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   fieldLabel: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '950',
     textTransform: 'uppercase',
@@ -731,9 +732,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 62,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
   },
   inputPressable: {
@@ -746,7 +747,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputText: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -756,7 +757,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   inputSubtext: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '700',
     marginTop: 2,
@@ -772,16 +773,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 5,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
   },
   travelModeButtonSelected: {
     borderColor: '#208AEF',
     backgroundColor: '#145B9B',
   },
   travelModeText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '900',
   },
@@ -807,7 +808,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   saveButton: {
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
     borderWidth: 1,
     borderColor: '#7F4DFF',
   },
@@ -828,9 +829,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   actionButtonDisabled: {
-    backgroundColor: '#161D26',
-    borderColor: '#1D2633',
-    opacity: 0.5,
+    backgroundColor: '#7D6C81',
+    borderColor: '#7D6C81',
+    opacity: 1,
     elevation: 0,
   },
   actionButtonText: {
@@ -851,9 +852,9 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000000',
@@ -862,13 +863,13 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   modalTitle: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 18,
     fontWeight: '950',
     marginBottom: 8,
   },
   modalDescription: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 18,
@@ -877,11 +878,11 @@ const styles = StyleSheet.create({
   modalInput: {
     height: 48,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#05070B',
+    backgroundColor: '#FCFCFC',
     paddingHorizontal: 12,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '800',
     marginBottom: 20,
@@ -908,15 +909,15 @@ const styles = StyleSheet.create({
   modalBtnCancel: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
   },
   modalBtnCancelText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 13,
     fontWeight: '900',
   },
   modalBtnConfirm: {
-    backgroundColor: '#6A29FF',
+    backgroundColor: '#6A0DAD',
   },
   modalBtnConfirmText: {
     color: '#FFFFFF',
@@ -935,11 +936,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderWidth: 1,
-    borderColor: '#1D2633',
+    borderColor: '#DED5E0',
     borderRadius: 8,
-    backgroundColor: '#0C1118',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -956,7 +957,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   loadingText: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -964,7 +965,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   listHeaderTitle: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '950',
     textTransform: 'uppercase',
@@ -1001,12 +1002,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listItemName: {
-    color: '#FFFFFF',
+    color: '#3C1642',
     fontSize: 14,
     fontWeight: '900',
   },
   listItemAddress: {
-    color: '#7F8A9B',
+    color: '#6F5873',
     fontSize: 11,
     fontWeight: '700',
     marginTop: 2,

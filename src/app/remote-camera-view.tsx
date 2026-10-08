@@ -1,13 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, UIManager, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
 import { analyzeLiveFrame, disconnectLiveVision } from '@/lib/live-vision';
-import { createCameraViewSession, type CameraViewSession } from '@/lib/remote-cameras';
+import { createCameraViewSession, getRemoteCameras, type RemoteCamera, type CameraViewSession } from '@/lib/remote-cameras';
+import { PhoneLiveCamera } from '@/components/phone-live-camera';
 import { speak, stopSpeaking } from '@/lib/voice';
 
 type WebViewModule = typeof import('react-native-webview');
@@ -43,8 +44,81 @@ const WEBRTC_FRAME_CAPTURE_SCRIPT = `
 
 export default function RemoteCameraViewScreen() {
   const params = useLocalSearchParams<{ cameraId?: string; name?: string }>();
-  const cameraId = typeof params.cameraId === 'string' ? params.cameraId : '';
-  const cameraName = typeof params.name === 'string' ? params.name : 'Cámara Anny';
+  const preferredId = typeof params.cameraId === 'string' ? params.cameraId : '';
+  const [camera, setCamera] = useState<RemoteCamera | null>(null);
+  const [source, setSource] = useState<'phone' | 'glasses' | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [focused, setFocused] = useState(false);
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
+  const requestRef = useRef(0);
+
+  const chooseGlasses = useCallback(async () => {
+    const request = ++requestRef.current;
+    setChoosing(true);
+    setNotice('');
+    try {
+      const cameras = await getRemoteCameras();
+      if (request !== requestRef.current) return;
+      const available = cameras.filter((item) => item.enabled && item.online);
+      const selected = available.find((item) => item.id === preferredId) ?? available[0];
+      setCamera(selected ?? null);
+      setSource(selected ? 'glasses' : 'phone');
+      if (!selected) setNotice('No hay un lente transmitiendo. Usando la cámara del celular.');
+    } catch {
+      if (request !== requestRef.current) return;
+      setSource('phone');
+      setNotice('No se pudo consultar el lente. Usando la cámara del celular.');
+    } finally {
+      if (request === requestRef.current) setChoosing(false);
+    }
+  }, [preferredId]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => void chooseGlasses(), 0);
+    return () => { clearTimeout(timer); requestRef.current += 1; };
+  }, [chooseGlasses]);
+
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => setForeground(state === 'active'));
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <View style={styles.screen}>
+      {focused && foreground && source === 'glasses' && camera ? (
+        <LensCameraView key={camera.id} cameraId={camera.id} cameraName={camera.name} />
+      ) : focused && foreground && source === 'phone' ? (
+        <PhoneLiveCamera />
+      ) : <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator color="#72D68B" size="large" /></View>}
+      <SafeAreaView edges={['bottom']} style={styles.sourcePanel}>
+        {notice ? <Text style={styles.sourceNotice}>{notice}</Text> : null}
+        <View style={styles.sourceRow}>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: source === 'glasses', busy: choosing }} onPress={() => void chooseGlasses()} disabled={choosing} style={[styles.sourceButton, source === 'glasses' && styles.sourceSelected]}>
+            <Text style={styles.sourceText}>{choosing ? 'BUSCANDO LENTE…' : 'LENTE'}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: source === 'phone' }} onPress={() => {
+            requestRef.current += 1;
+            setChoosing(false);
+            setNotice('');
+            setSource('phone');
+          }} style={[styles.sourceButton, source === 'phone' && styles.sourceSelected]}>
+            <Text style={styles.sourceText}>CELULAR</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Elegir o vincular lente" onPress={() => router.push('/remote-cameras')} style={styles.sourceButton}>
+            <MaterialCommunityIcons name="cog-outline" color="#FFFFFF" size={24} />
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+function LensCameraView({ cameraId, cameraName }: { cameraId: string; cameraName: string }) {
   const [session, setSession] = useState<CameraViewSession | null>(null);
   const [webViewModule, setWebViewModule] = useState<WebViewModule | null>(null);
   const [loading, setLoading] = useState(true);
@@ -215,11 +289,17 @@ export default function RemoteCameraViewScreen() {
 }
 
 const styles = StyleSheet.create({
+  sourcePanel: { backgroundColor: '#17111A', padding: 12, gap: 8 },
+  sourceRow: { flexDirection: 'row', gap: 8 },
+  sourceButton: { flex: 1, minHeight: 48, backgroundColor: '#32303A', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  sourceSelected: { backgroundColor: '#6A0DAD' },
+  sourceText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
+  sourceNotice: { color: '#FFFFFF', fontSize: 12 },
   screen: { flex: 1, backgroundColor: '#000000' },
   video: { position: 'absolute', inset: 0, backgroundColor: '#000000' },
-  centerState: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', gap: 13, padding: 30, backgroundColor: '#05070B' },
-  stateTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900', textAlign: 'center' },
-  stateText: { color: '#AEB7C7', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  centerState: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', gap: 13, padding: 30, backgroundColor: '#FCFCFC' },
+  stateTitle: { color: '#3C1642', fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  stateText: { color: '#5B465F', fontSize: 14, lineHeight: 20, textAlign: 'center' },
   overlay: { position: 'absolute', inset: 0, justifyContent: 'space-between' },
   header: { height: 70, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, backgroundColor: 'rgba(3,6,10,0.88)' },
   backButton: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2330' },
