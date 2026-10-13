@@ -1,11 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import type { CameraView as ExpoCameraView } from 'expo-camera';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Image,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,7 +24,10 @@ import {
 import { speak, stopSpeaking } from '@/lib/voice';
 import WifiLensCamera, { type WifiLensCameraHandle } from '@/components/WifiLensCamera';
 import { loadSettings } from '@/lib/settings-storage';
+import { useWifiLens } from '@/context/wifi-lens-context';
 
+type CameraSource = 'glasses' | 'phone';
+type ExpoCameraModule = typeof import('expo-camera');
 
 const MODE_CONTENT: Record<
   VisualAnalysisMode,
@@ -60,13 +66,22 @@ export default function VisualScannerScreen() {
 
 function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
   const content = MODE_CONTENT[mode];
+  const {wifiLensConnection} = useWifiLens();
+  const manualCameraSelection = useRef(false);
+  const automaticPhoneAttempted = useRef(false);
   const wifiCameraRef = useRef<WifiLensCameraHandle>(null);
+  const phoneCameraRef = useRef<ExpoCameraView>(null);
+  const [source, setSource] = useState<CameraSource>('glasses');
+  const [cameraModule, setCameraModule] = useState<ExpoCameraModule | null>(null);
+  const [switchingCamera, setSwitchingCamera] = useState(false);
+  const switchingRef = useRef(false);
+  const generationRef = useRef(0);
   const mountedRef = useRef(true);
   const scanningRef = useRef(false);
   const firstScanPendingRef = useRef(true);
   const speakingRef = useRef(false);
   const [scanInterval, setScanInterval] = useState(30);
-  const [focused, setFocused] = useState(false);
+  const focused = useIsFocused();
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
   const [cycle, setCycle] = useState(0);
   const activeRef = useRef(false);
@@ -77,49 +92,112 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
   const [capturedUri, setCapturedUri] = useState('');
 
   const readResult = useCallback(async (text: string) => {
+    const generation = generationRef.current;
     speakingRef.current = true;
     try {
       await speak(text, { onError: () => {
-        if (mountedRef.current) setError('No se pudo reproducir la voz. Probá Volver a escuchar y revisá la voz en español del dispositivo.');
+        if (mountedRef.current && generation === generationRef.current) setError('No se pudo reproducir la voz. Probá Volver a escuchar y revisá la voz en español del dispositivo.');
       } });
     } finally {
-      speakingRef.current = false;
+      if (generation === generationRef.current) speakingRef.current = false;
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
+  const cancelScan = useCallback(() => {
+    generationRef.current++;
+    scanningRef.current = false;
+    speakingRef.current = false;
+    setIsAnalyzing(false);
+    void stopSpeaking();
+  }, []);
+
+  useEffect(() => {
+    if (!focused) return;
     let current = true;
     firstScanPendingRef.current = true;
-    setFocused(true);
     void loadSettings().then((settings) => {
       if (current) setScanInterval(Math.min(120, Math.max(5, Number(settings.scanInterval) || 30)));
     });
     return () => {
       current = false;
       activeRef.current = false;
-      setFocused(false);
-      void stopSpeaking();
+      setCameraReady(false);
+      cancelScan();
     };
-  }, []));
+  }, [focused, cancelScan]);
 
   useEffect(() => {
     activeRef.current = focused && foreground;
     const subscription = AppState.addEventListener('change', (state) => {
       activeRef.current = focused && state === 'active';
       setForeground(state === 'active');
-      if (state !== 'active') void stopSpeaking();
+      if (state !== 'active') {
+        cancelScan();
+        if (source === 'phone') setCameraReady(false);
+      }
     });
     return () => subscription.remove();
-  }, [focused, foreground]);
+  }, [focused, foreground, source, cancelScan]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; void stopSpeaking(); };
   }, []);
 
-  const scanImage = useCallback(async () => {
-    if (!activeRef.current || !wifiCameraRef.current || !cameraReady || scanningRef.current || speakingRef.current) return;
+  const changeCamera = useCallback(async (next: CameraSource) => {
+    if (next === source || switchingRef.current || isAnalyzing || !focused || AppState.currentState !== 'active') return;
+    switchingRef.current = true;
+    setSwitchingCamera(true);
+    try {
+      if (next === 'phone') {
+        const module = cameraModule ?? await import('expo-camera');
+        const current = await module.Camera.getCameraPermissionsAsync();
+        const permission = current.granted ? current : await module.Camera.requestCameraPermissionsAsync();
+        if (!mountedRef.current) return;
+        if (!permission.granted) {
+          Alert.alert('Permiso de cámara', 'Permití el acceso a la cámara para escanear con el celular.',
+            permission.canAskAgain ? [{text: 'Entendido'}] : [
+              {text: 'Cancelar', style: 'cancel'},
+              {text: 'Abrir ajustes', onPress: () => { void Linking.openSettings(); }},
+            ]);
+          return;
+        }
+        setCameraModule(module);
+      }
+      if (!mountedRef.current || !activeRef.current || AppState.currentState !== 'active') return;
+      cancelScan();
+      firstScanPendingRef.current = true;
+      setCameraReady(false);
+      setResult('');
+      setError('');
+      setCapturedUri('');
+      setSource(next);
+      console.info(`[AnnyScanner] camera_selected source=${next} mode=${mode}`);
+      void readResult(next === 'phone' ? 'Cámara del celular activada.' : 'Cámara de los lentes activada.');
+    } catch (reason) {
+      if (mountedRef.current && activeRef.current) setError(getErrorMessage(reason));
+    } finally {
+      switchingRef.current = false;
+      if (mountedRef.current) setSwitchingCamera(false);
+    }
+  }, [source, isAnalyzing, focused, cameraModule, cancelScan, mode, readResult]);
 
+  useEffect(() => {
+    // Wait for the initial connection check. Do not interrupt a connection in
+    // progress, undo a manual choice, or repeat a denied permission prompt.
+    if (!focused || !foreground || AppState.currentState !== 'active' || !wifiLensConnection.enabled ||
+        wifiLensConnection.phase !== 'disconnected' || source !== 'glasses' ||
+        manualCameraSelection.current || automaticPhoneAttempted.current ||
+        switchingRef.current || isAnalyzing) return;
+    automaticPhoneAttempted.current = true;
+    void changeCamera('phone');
+  }, [focused, foreground, wifiLensConnection.enabled, wifiLensConnection.phase, source, isAnalyzing, changeCamera]);
+
+  const scanImage = useCallback(async () => {
+    if (!activeRef.current || !cameraReady || switchingRef.current || scanningRef.current || speakingRef.current) return;
+
+    const generation = generationRef.current;
+    const isCurrent = () => mountedRef.current && activeRef.current && generation === generationRef.current;
     scanningRef.current = true;
     firstScanPendingRef.current = false;
     setIsAnalyzing(true);
@@ -129,36 +207,47 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
 
     try {
       await stopSpeaking();
-      const base64 = await wifiCameraRef.current!.capture();
-      const picture = { base64, uri: `data:image/jpeg;base64,${base64}` };
-      if (!mountedRef.current || !activeRef.current) return;
+      if (!isCurrent()) return;
+      let picture: {base64: string; uri: string};
+      if (source === 'phone') {
+        const photo = await phoneCameraRef.current?.takePictureAsync({base64: true, quality: 0.85, shutterSound: false});
+        if (!photo?.base64) throw new Error('No se pudo capturar la imagen del celular. Intentá nuevamente.');
+        picture = {base64: photo.base64, uri: photo.uri};
+      } else {
+        if (!wifiCameraRef.current) throw new Error('La cámara de los lentes todavía no está lista.');
+        const base64 = await wifiCameraRef.current.capture();
+        picture = {base64, uri: `data:image/jpeg;base64,${base64}`};
+      }
+      if (!isCurrent()) return;
       setCapturedUri(picture.uri);
+      console.info(`[AnnyScanner] captured source=${source} mode=${mode}`);
 
       const analysis = await analyzeVisualImage(
         `data:image/jpeg;base64,${picture.base64}`,
         mode,
       );
-      if (!mountedRef.current || !activeRef.current) return;
+      if (!isCurrent()) return;
       setResult(analysis);
+      console.info(`[AnnyScanner] analysis_completed source=${source} mode=${mode}`);
       setIsAnalyzing(false);
       await readResult(analysis);
     } catch (scanError) {
-      if (!mountedRef.current || !activeRef.current) return;
+      if (!isCurrent()) return;
       const message = getErrorMessage(scanError);
       setError(message);
       setIsAnalyzing(false);
       await readResult(message);
     } finally {
-      scanningRef.current = false;
-      if (mountedRef.current) {
+      if (generation === generationRef.current) scanningRef.current = false;
+      if (mountedRef.current && generation === generationRef.current) {
         setIsAnalyzing(false);
         setCycle((value) => value + 1);
       }
     }
-  }, [cameraReady, mode, readResult]);
+  }, [cameraReady, mode, readResult, source]);
 
   useEffect(() => {
-    if (!focused || !foreground || !cameraReady) return;
+    if (!focused || !foreground || !cameraReady || switchingCamera) return;
     const timer = setTimeout(() => {
       if (scanningRef.current || speakingRef.current) {
         setCycle((value) => value + 1);
@@ -167,31 +256,42 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
       }
     }, firstScanPendingRef.current ? 2000 : scanInterval * 1000);
     return () => clearTimeout(timer);
-  }, [focused, foreground, cameraReady, scanInterval, scanImage, cycle]);
+  }, [focused, foreground, cameraReady, switchingCamera, scanInterval, scanImage, cycle]);
+
+  const PhoneCameraView = cameraModule?.CameraView;
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
 
       <View style={StyleSheet.absoluteFill}>
-        <WifiLensCamera ref={wifiCameraRef} onReady={setCameraReady} />
+        {source === 'glasses' ? (
+          <WifiLensCamera ref={wifiCameraRef} onReady={setCameraReady} />
+        ) : focused && foreground && PhoneCameraView ? (
+          <PhoneCameraView ref={phoneCameraRef} style={StyleSheet.absoluteFill} facing="back" flash="off"
+            onCameraReady={() => { setCameraReady(true); setError(''); }}
+            onMountError={() => { setCameraReady(false); setError('No se pudo abrir la cámara del celular. Probá volver a seleccionarla desde Lentes.'); }} />
+        ) : null}
       </View>
 
       <SafeAreaView pointerEvents={isAnalyzing ? 'none' : 'box-none'} accessibilityElementsHidden={isAnalyzing} importantForAccessibility={isAnalyzing ? 'no-hide-descendants' : 'auto'} style={styles.overlay}>
-        <View style={styles.header}>
-          <Pressable
-            accessibilityLabel="Volver a Ayuda"
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/help')}
-            style={styles.backButton}>
-            <Ionicons color="#FFFFFF" name="chevron-back" size={25} />
-          </Pressable>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>{content.title}</Text>
-            <Text style={styles.instruction}>{'Apuntá con la cámara del lente WiFi.'}</Text>
+        <View>
+          <View style={styles.header}>
+            <Pressable
+              accessibilityLabel="Volver a Ayuda"
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/help')}
+              style={styles.backButton}>
+              <Ionicons color="#FFFFFF" name="chevron-back" size={25} />
+            </Pressable>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>{content.title}</Text>
+              <Text style={styles.instruction}>{source === 'glasses' ? 'Apuntá con la cámara de los lentes.' : content.instruction}</Text>
+            </View>
+            <View style={styles.headerIcon}>
+              <MaterialCommunityIcons color="#FFFFFF" name={content.icon} size={22} />
+            </View>
           </View>
-          <View style={styles.headerIcon}>
-            <MaterialCommunityIcons color="#FFFFFF" name={content.icon} size={22} />
-          </View>
+
         </View>
 
         <View style={styles.bottomPanel}>
@@ -214,20 +314,36 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
 
           {error ? <Text accessibilityLiveRegion="polite" style={styles.errorText}>{error}</Text> : null}
 
-          <Pressable accessibilityRole="button" accessibilityLabel="Detener voz" onPress={() => void stopSpeaking()} style={styles.settingsButton}>
-            <Text style={styles.settingsButtonText}>DETENER VOZ</Text>
-          </Pressable>
+          <View style={styles.controlsRow}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Detener voz" onPress={() => void stopSpeaking()} style={styles.settingsButton}>
+              <Text style={styles.settingsButtonText}>DETENER VOZ</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button"
+              accessibilityLabel={source === 'glasses' ? 'Cambiar a cámara del celular' : 'Cambiar a cámara de los lentes'}
+              accessibilityState={{disabled: switchingCamera || isAnalyzing}}
+              disabled={switchingCamera || isAnalyzing}
+              onPress={() => {
+                manualCameraSelection.current = true;
+                void changeCamera(source === 'glasses' ? 'phone' : 'glasses');
+              }}
+              style={[styles.settingsButton, switchingCamera && styles.scanButtonDisabled]}>
+              {switchingCamera ? <ActivityIndicator color="#FFFFFF" size="small" /> : (
+                <MaterialCommunityIcons color="#FFFFFF" size={22} name={source === 'glasses' ? 'cellphone' : 'glasses'} />
+              )}
+              <Text style={styles.settingsButtonText}>{source === 'glasses' ? 'CELULAR' : 'LENTES'}</Text>
+            </Pressable>
+          </View>
 
           <Pressable
             accessibilityHint={content.instruction}
             accessibilityLabel={content.action}
             accessibilityRole="button"
-            accessibilityState={{ disabled: !cameraReady || isAnalyzing }}
-            disabled={!cameraReady || isAnalyzing}
+            accessibilityState={{ disabled: !cameraReady || isAnalyzing || switchingCamera }}
+            disabled={!cameraReady || isAnalyzing || switchingCamera}
             onPress={() => void scanImage()}
             style={({ pressed }) => [
               styles.scanButton,
-              !cameraReady || isAnalyzing ? styles.scanButtonDisabled : null,
+              !cameraReady || isAnalyzing || switchingCamera ? styles.scanButtonDisabled : null,
               pressed ? styles.scanButtonPressed : null,
             ]}>
             {isAnalyzing ? (
@@ -280,7 +396,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   emptyTitle: { color: '#3C1642', fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  settingsButton: { marginTop: 8, borderRadius: 8, backgroundColor: '#6A0DAD', paddingHorizontal: 22, paddingVertical: 13 },
+  controlsRow: {flexDirection: 'row', gap: 10, marginTop: 8},
+  settingsButton: {flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 8, backgroundColor: '#6A0DAD', paddingHorizontal: 8, paddingVertical: 13},
   settingsButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
   overlay: { position: 'absolute', inset: 0, justifyContent: 'space-between' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(60,22,66,0.92)', paddingHorizontal: 14, paddingVertical: 12 },

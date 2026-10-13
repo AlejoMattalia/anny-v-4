@@ -12,6 +12,15 @@ BLE configura el firmware `lente-wifi-2`; el video se transmite por WiFi.
 La IA sigue la separación de v3: el escaneo usa `EXPO_PUBLIC_APP_API_IA_URL`
 (Elastic Beanstalk, REST) y streaming usa `EXPO_PUBLIC_REALTIME_AI_URL`
 (`http://ec2-3-15-63-191.us-east-2.compute.amazonaws.com`, Socket.IO).
+Los escáneres de texto, imagen y billetes permiten cambiar entre **Lentes / Celular**
+con un botón junto a **Detener voz**. El botón indica la cámara a la que se cambia.
+Si la comprobación de conexión indica que los lentes están desconectados, el
+escáner abre automáticamente la cámara del celular. Respeta la selección manual
+y no repite el pedido de permiso si se rechaza.
+Celular solicita permiso de cámara y utiliza la cámara trasera, tanto para el
+escaneo automático como para el botón de captura. Al cambiar de cámara se
+limpian el resultado y la voz anteriores; la cámara del celular se libera al
+salir de la pantalla o enviar Anny a segundo plano.
 Streaming envía `set_mode` y `analyze` con el modo elegido, consulta breve y
 `requestId`; recibe `description`. Pide una frase completa de hasta 20 palabras.
 El selector ofrece Viaje, Facultad, Supermercado, Deporte y Seguro, con las

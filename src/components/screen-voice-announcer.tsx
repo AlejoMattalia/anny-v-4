@@ -16,7 +16,7 @@ const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
   '/explore':
     'Sección Explorar. Podés conocer tu ubicación, explorar el mapa o buscar lugares cercanos.',
   '/visual-scanner':
-    'Asistencia visual. Apuntá la cámara y mantené el celular quieto. Anny escanea automáticamente con el intervalo de Configuración y lee el resultado en voz alta. Podés detener la voz o escanear ahora con los botones.',
+    'Asistencia visual. Podés cambiar entre Lentes y Celular con el botón junto a Detener voz. Apuntá la cámara y mantenela quieta. Anny escanea automáticamente con el intervalo de Configuración y lee el resultado en voz alta. Podés detener la voz o escanear ahora con los botones.',
   '/map-explorer':
     'Explorador de mapa. Podés mover el mapa, escribir el nombre de un lugar, seleccionar marcadores o centrar el mapa en tu ubicación.',
   '/where-am-i':
