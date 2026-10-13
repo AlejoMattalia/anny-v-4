@@ -20,12 +20,24 @@ function readEnvValue(filePath, key) {
 module.exports = ({ config }) => {
   const projectRoot = path.dirname(require.resolve('./package.json'));
   const legacyEnvPath = path.resolve(projectRoot, '../anny-app-v3/.env');
+  const unsignedIosPreview = process.env.ANNY_IOS_UNSIGNED_PREVIEW === '1';
   const googleMapKey =
     process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY ||
-    readEnvValue(legacyEnvPath, 'GOOGLE_MAP_KEY');
+    (unsignedIosPreview ? '' : readEnvValue(legacyEnvPath, 'GOOGLE_MAP_KEY'));
 
   return {
     ...config,
+    ios: {
+      ...config.ios,
+      infoPlist: {
+        ...config.ios?.infoPlist,
+        // The existing test API uses HTTP, including an IP address. Keep this
+        // exception limited to the explicitly selected personal iOS preview.
+        ...(unsignedIosPreview ? {
+          NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
+        } : {}),
+      },
+    },
     plugins: [
       ...(config.plugins || []),
       [

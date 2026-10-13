@@ -8,6 +8,8 @@
     "scheme": "annyv4",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.anonymous.annyv4",
+      "buildNumber": "4",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSContactsUsageDescription": "Anny necesita acceder a tus contactos para mostrar tu agenda y ayudarte a llamar a tus contactos.",

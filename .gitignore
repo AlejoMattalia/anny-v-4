@@ -12,6 +12,8 @@ expo-env.d.ts
 # Native
 .kotlin/
 *.apk
+*.ipa
+*.xcarchive/
 *.orig.*
 *.jks
 *.p8

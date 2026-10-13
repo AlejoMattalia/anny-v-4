@@ -30,9 +30,16 @@ export type LensStatus = {
 };
 let requestedPhoneWifi = false;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-export const saveLensPairing = (pair: LensPairing): Promise<void> =>
-  NativeModules.LocalLensCredentials.set(JSON.stringify(pair));
+export async function saveLensPairing(pair: LensPairing): Promise<void> {
+  if (!NativeModules.LocalLensCredentials) {
+    throw new Error('La conexión con los lentes todavía no está disponible en esta versión para iPhone.');
+  }
+  await NativeModules.LocalLensCredentials.set(JSON.stringify(pair));
+}
 export async function loadLensPairing(): Promise<LensPairing | null> {
+  // iOS preview has no Android Keystore module. Treat it as unpaired so the
+  // scanner can automatically select the phone camera on a fresh installation.
+  if (!NativeModules.LocalLensCredentials) return null;
   const value = await NativeModules.LocalLensCredentials.get();
   if (!value) {
     return null;

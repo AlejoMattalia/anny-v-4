@@ -1,5 +1,36 @@
 # Welcome to your Expo app 👋👋
 
+## Prueba personal en iPhone desde Linux
+
+El workflow `.github/workflows/ios-unsigned.yml` compila en macOS con Xcode
+26.4.1 una IPA **sin firmar**, Release y arm64 (incluye iPhone 15 Pro).
+Se ejecuta al subir una rama `ios-preview/**`; también admite ejecución manual
+cuando el workflow está en la rama predeterminada. El artefacto
+`anny-v4-iphone-unsigned` contiene la IPA y su SHA-256 y se conserva siete días.
+No usa certificados, cuenta Apple ni publica en App Store/TestFlight.
+
+El script equivalente en una Mac, después de `npm ci`, es
+`bash scripts/build-ios-unsigned.sh`. Usa directorios nuevos bajo
+`dist/ios-unsigned/`, sin borrar compilaciones anteriores. La app incluye el
+bundle JavaScript y no necesita un servidor Metro abierto.
+
+Esta primera prueba usa la cámara del iPhone para los tres escáneres. El
+receptor UDP, el visor y el servicio de streaming en segundo plano de los
+lentes son exclusivos de Android y todavía no están portados a iOS; la app
+muestra esa limitación si se selecciona Lentes. La compilación no demuestra
+que las funciones hayan sido probadas en un iPhone físico.
+
+En CI se utilizan los endpoints públicos de `.env.example`. No se suben los
+archivos `.env` locales ni la clave de Google Maps; la búsqueda de lugares
+que requiere esa clave necesita configuración adicional. El indicador
+`ANNY_IOS_UNSIGNED_PREVIEW=1` habilita HTTP en esta prueba porque los servicios
+actuales usan HTTP y evita leer la clave del proyecto v3. Revisar HTTPS antes
+de distribuir una versión de producción.
+
+Una IPA sin firma **no se instala directamente en un iPhone**. Para probarla
+en el dispositivo necesita firma personal mediante una herramienta de
+instalación compatible. Generar este archivo no elimina ese requisito.
+
 ## Lentes WiFi: integración de anny-app-v3
 
 Inicio y Dispositivos usan el mismo gestor `WifiLensConnectionManager` de v3:

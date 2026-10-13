@@ -1,0 +1,54 @@
+name: iOS unsigned preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ios-preview/**']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      ANNY_IOS_UNSIGNED_PREVIEW: '1'
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.1.app/Contents/Developer
+          xcodebuild -version
+      - name: Install dependencies
+        run: npm ci
+      - name: Configure public test endpoints
+        run: cp .env.example .env
+      - name: Build unsigned IPA
+        run: |
+          set -o pipefail
+          bash scripts/build-ios-unsigned.sh 2>&1 | tee ios-build.log
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: anny-v4-iphone-unsigned
+          path: |
+            dist/ios-unsigned/build-*/anny-v4-unsigned.ipa
+            dist/ios-unsigned/build-*/anny-v4-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ios-build.log
+          if-no-files-found: ignore
+          retention-days: 7
