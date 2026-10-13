@@ -1,4 +1,4 @@
-# Welcome to your Expo app 👋
+# Welcome to your Expo app 👋👋
 
 ## Lentes WiFi: integración de anny-app-v3
 
