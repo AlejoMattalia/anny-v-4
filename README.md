@@ -38,12 +38,24 @@ reciente del receptor nativo. Se retiró el visor temporal que consultaba
 Keystore, como en v3. El servicio de primer plano conserva el receptor al
 bloquear el teléfono mientras la pantalla de cámara permanece abierta.
 
-El visor prioriza el último cuadro completo sin acumular una cola. Un parcial
-no reemplaza un cuadro completo pendiente de decodificar. Si la última imagen
-completa tiene menos de 300 ms, conserva esa imagen; después admite parciales
-con al menos 90 % de bytes JPEG consecutivos. Esa proporción no mide píxeles
-visibles. Se mantienen FEC y recepción continua. En Wi-Fi se solicita el perfil fluid
-antes de abrir el video; el firmware actual conserva VGA con compresión equilibrada para el video.
+El visor dibuja el video desde su decodificador en una `SurfaceView`, separado
+del hilo de interfaz. Con firmware 2.4.13 y Hotspot, `playout_ms:40` activa un
+buffer pequeño: 100 ms al inicio, hasta cuatro imágenes y descarte al superar
+250 ms de edad. Esto suaviza entregas en ráfagas sin acumular segundos de video.
+El ritmo de reproducción se adapta al ritmo recibido (40–100 ms entre imágenes).
+Los eventos de estado usan el dispatcher de Fabric. Los logs `DISPLAY` incluyen
+pausa máxima, tiempo de dibujo y edad máxima en el buffer.
+Wi-Fi, MJPEG y firmware sin esa indicación mantienen sólo el último cuadro.
+Las pruebas Kotlin cubren ráfagas, caducidad, límite de memoria y compatibilidad.
+
+El visor prioriza movimiento: un parcial nuevo puede reemplazar un completo
+anterior y todos los prefijos consecutivos se intentan decodificar, sin umbral
+del 90 % ni espera de 300 ms. Puede verse una zona incompleta/gris. END permite
+12 ms para reordenamiento; sin END, se libera el parcial tras 60 ms sin datos.
+El watchdog de recepción usa el último JPEG realmente decodificado, evitando
+que prefijos ilegibles oculten una imagen congelada. `DISPLAY partial_frames`
+cuenta los parciales dibujados. Se mantienen FEC y recepción continua. Se solicita el perfil fluid
+antes de abrir el video tanto en Wi-Fi como en Hotspot; el firmware elige el perfil de cada red.
 La IA recibe únicamente cuadros completos recientes, incluidos los reparados por FEC.
 El firmware Wi-Fi mejorado del 8 de octubre de 2026 fue reinstalado a pedido
 del usuario: VGA, JPEG 12 inicial, presupuesto adaptativo de 16 KiB y envío
@@ -55,6 +67,17 @@ Kotlin del build Android en la caché de Gradle).
 Las adaptaciones de v4 son Expo Router, voz con `expo-speech`, almacenamiento
 de redes y contexto compartido. Los archivos Kotlin se registran mediante
 `plugins/with-wifi-lens.js` para sobrevivir a `expo prebuild`.
+
+En Android, el streaming de los lentes continúa al salir a Inicio o bloquear la
+pantalla: conserva la recepción de imágenes, el análisis y las descripciones por
+voz. Los ciclos de captura y los plazos de voz/análisis usan un reloj nativo
+Android independiente de la pantalla; no acumulan capturas al volver a la app.
+Iniciarlo con Anny abierta; la notificación «Lentes Anny activos» permite
+volver al streaming. Pausar, salir de esa pantalla dentro de Anny o cerrar la
+app desde Recientes libera el servicio. La cámara del celular y la escucha por
+micrófono requieren primer plano. No funciona con el teléfono completamente
+apagado ni después de forzar la detención de la app. Los perfiles de video de
+Wi-Fi y Hotspot no se modifican para esta función.
 
 El flujo de placa ESP32 con código de activación queda deshabilitado. Su
 implementación se conserva en `src/disabled/esp32-camera-setup.tsx`; la ruta
@@ -125,6 +148,16 @@ Join our community of developers creating universal apps.
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
 
-Hotspot (8 de octubre de 2026): el perfil fluid parte de 640×480 con JPEG 16
-y un presupuesto de 12 KiB. Ante congestión baja a 480×320 con presupuesto
-de 9 KiB, evitando las caídas a 400×296 y 320×240. Wi-Fi conserva su perfil VGA.
+Hotspot (9 de octubre de 2026, firmware 2.4.10): el perfil fluid arranca en
+480×320 con JPEG 20 y un objetivo de 7 KiB por imagen. El intervalo inicial
+entre capturas es de 67 ms (techo aproximado de 15 FPS, no tasa garantizada).
+Anny negocia `feedback=1` y envía una ventana de recepción cada segundo:
+cuadros completos, incompletos/perdidos y edad de la última imagen completa.
+El firmware reduce el ritmo hasta intervalos de 150 ms si la pérdida alcanza
+20 % en dos informes consecutivos o pasa un segundo sin imagen completa;
+también puede aumentar la compresión. Recupera el ritmo gradualmente tras
+cinco segundos con hasta 10 % de pérdida e imágenes completas recientes.
+FEC y el protocolo anterior siguen disponibles; la app usa el heartbeat
+anterior si el firmware no confirma feedback. Wi-Fi conserva VGA y su ritmo
+sin limitación adicional. La mejora del hotspot del mismo teléfono necesita
+una comprobación en ese escenario; los tests no garantizan fluidez en cada red.

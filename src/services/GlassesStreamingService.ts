@@ -1,4 +1,4 @@
-import {PermissionsAndroid, Platform} from 'react-native';
+import {AppState, PermissionsAndroid, Platform} from 'react-native';
 import BackgroundService from 'react-native-background-actions';
 
 // Each camera owner holds a lease. Navigating between screens must not stop a
@@ -25,16 +25,19 @@ export const startGlassesStreamingService = (owner: symbol): Promise<void> => {
   return queue(async () => {
     if (Platform.OS !== 'android' || BackgroundService.isRunning() || !owners.has(owner)) return;
     try {
+      if (AppState.currentState !== 'active') throw new Error('Abrí Anny para iniciar el streaming en segundo plano.');
       await requestNotificationPermission();
       if (!owners.has(owner)) return;
+      if (AppState.currentState !== 'active') throw new Error('Volvé a Anny para activar el streaming en segundo plano.');
       await BackgroundService.start(
         // The library releases its HeadlessJS task in stop(). Resolving this
         // promise separately would make it call stop() again during a handoff.
         () => new Promise<void>(() => {}),
         {
           taskName: 'AnnyGlassesStream',
-          taskTitle: 'Cámara de lentes Anny activa',
-          taskDesc: 'Transmitiendo video desde los lentes',
+          taskTitle: 'Lentes Anny activos',
+          taskDesc: 'Continúa con la pantalla bloqueada. Tocá para volver y pausar.',
+          linkingURI: 'annyv4://realtime-streaming',
           taskIcon: {name: 'ic_launcher', type: 'mipmap'},
           color: '#3C1642',
           foregroundServiceType: ['connectedDevice'],

@@ -39,6 +39,7 @@ module.exports = function withWifiLens(config) {
     let service = app.service.find((item) => item.$['android:name'] === name);
     if (!service) { service = { $: { 'android:name': name } }; app.service.push(service); }
     service.$['android:foregroundServiceType'] = 'connectedDevice';
+    service.$['android:stopWithTask'] = 'true';
     return mod;
   });
 };

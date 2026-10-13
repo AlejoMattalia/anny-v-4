@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { normalizeStreamingCurrency } from '../services/StreamingResponse';
 import { STREAMING_MODES, type StreamingMode } from '../services/StreamingModes';
+import { streamingTimeout } from '../services/StreamingClock';
 
 // Same Socket.IO service and default mode as anny-app-v3/RealtimeStreaming.
 // Image scanning keeps its separate Elastic Beanstalk REST service.
@@ -34,11 +35,11 @@ function getSocket() {
 async function connect(activeSocket: Socket) {
   if (activeSocket.connected) return;
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => finish(new Error('No se pudo conectar con Anny.')), 10000);
+    const cancelTimer = streamingTimeout(() => finish(new Error('No se pudo conectar con Anny.')), 10000);
     const onConnect = () => finish();
     const onError = () => finish(new Error('No se pudo conectar con Anny.'));
     function finish(error?: Error) {
-      clearTimeout(timer);
+      cancelTimer();
       activeSocket.off('connect', onConnect);
       activeSocket.off('connect_error', onError);
       activeSocket.off('disconnect', onError);
@@ -76,7 +77,7 @@ export async function analyzeRealtimeImage(image: string, query?: string) {
 
   return new Promise<string>((resolve, reject) => {
     const cancel = () => finish(new Error('Análisis cancelado por cambio de modo.'));
-    const timer = setTimeout(() => finish(new Error('Anny tardó demasiado en responder.')), 30000);
+    const cancelTimer = streamingTimeout(() => finish(new Error('Anny tardó demasiado en responder.')), 30000);
     const onDescription = (payload: Description) => {
       if ((payload.requestId !== undefined && payload.requestId !== requestId) ||
           (payload.mode !== undefined && payload.mode !== requestMode)) return;
@@ -91,7 +92,7 @@ export async function analyzeRealtimeImage(image: string, query?: string) {
     const onDisconnect = () => finish(new Error('Se perdió la conexión con Anny.'));
     function finish(error?: Error, text?: string) {
       pending.delete(cancel);
-      clearTimeout(timer);
+      cancelTimer();
       activeSocket.off('description', onDescription);
       activeSocket.off('error', onError);
       activeSocket.off('disconnect', onDisconnect);

@@ -23,7 +23,8 @@ compiler += [stdlib, annotations,
              jar('org.jetbrains.intellij.deps', 'trove4j', '1.0.20200330'),
              jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm', '1.8.1')]
 sources = [root / 'plugins/lens-wifi/android' / name for name in (
-    'LocalLensUdpFrame.kt', 'LocalLensFramePolicy.kt')]
+    'LocalLensUdpFrame.kt', 'LocalLensFramePolicy.kt', 'LocalLensReceptionFeedback.kt',
+    'LocalLensFrameQueue.kt', 'LocalLensPartialDeadline.kt')]
 sources += [root / '__tests__/native/LocalLensFramePolicyTest.kt']
 with tempfile.TemporaryDirectory(prefix='anny-frame-tests-') as directory:
     output = str(Path(directory) / 'tests.jar')

@@ -28,6 +28,7 @@ internal object LocalLensUdp {
         secret: String,
         connectionRef: AtomicReference<HttpURLConnection?>,
         active: () -> Boolean,
+        lastDecodedAt: () -> Long,
         onFrame: (LocalLensVideoFrame) -> Unit,
     ) {
         val url = URL(target)
@@ -37,7 +38,7 @@ internal object LocalLensUdp {
         try {
             val network = LocalLensNetwork.route(context, url)
             network?.bindSocket(udp)
-            udp.soTimeout = 40
+            udp.soTimeout = 10
             udp.receiveBufferSize = 256 * 1024
             // Bind first so the authenticated request advertises our actual receiving port.
             val deadline = SystemClock.elapsedRealtime() + 6000
@@ -54,7 +55,7 @@ internal object LocalLensUdp {
                     http.setRequestProperty("Authorization", "Basic " + Base64.encodeToString("admin:$secret".toByteArray(Charsets.UTF_8), Base64.NO_WRAP))
                     http.setRequestProperty("X-Lentes-Request", "1")
                     http.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                    val body = "port=${udp.localPort}&partial=1&ack=0&fec=1&fec_group=2".toByteArray(Charsets.US_ASCII)
+                    val body = "port=${udp.localPort}&partial=1&ack=0&fec=1&fec_group=2&feedback=1".toByteArray(Charsets.US_ASCII)
                     http.setFixedLengthStreamingMode(body.size)
                     http.outputStream.use { it.write(body) }
                     val code = http.responseCode
@@ -91,16 +92,19 @@ internal object LocalLensUdp {
             token = session
             val partial = config.optInt("partial", 0) == 1
             val acknowledge = config.optInt("ack", 0) == 1
+            val feedback = config.optInt("feedback", 0) == 1
             val fecGroup = config.optInt("fec", 0)
             require(fecGroup == 0 || fecGroup == 2 || fecGroup == 4)
             val fec = fecGroup != 0
             val groupSize = if (fec) fecGroup else 4
+            val playoutInterval = config.optInt("playout_ms", 0).let { if (it in 40..100) it else 0 }
             udp.connect(network?.getByName(url.host) ?: InetAddress.getByName(url.host), port)
-            Log.i("AnnyLensStream", "Using local UDP video; partial=$partial ack=$acknowledge fec=$fec group=$fecGroup")
+            Log.i("AnnyLensStream", "Using local UDP video; partial=$partial ack=$acknowledge fec=$fec group=$fecGroup feedback=$feedback")
             var heartbeat = 0L
             var lastPacket = SystemClock.elapsedRealtime()
-            var lastUsable = lastPacket
+            val reception = LocalLensReceptionFeedback(lastPacket)
             var framePacketAt = lastPacket
+            var frameEndAt: Long? = null
             val packetBytes = ByteArray(HEADER + PAYLOAD + 1)
             val packet = DatagramPacket(packetBytes, packetBytes.size)
             var current: LocalLensUdpFrame? = null
@@ -111,32 +115,36 @@ internal object LocalLensUdp {
             var repairedFragments = 0
             fun deliver(frame: LocalLensVideoFrame?) {
                 if (!active()) return
+                reception.record(frame, SystemClock.elapsedRealtime())
                 if (frame == null) { droppedFrames++; return }
                 if (frame.partial) partialFrames++ else completeFrames++
                 repairedFragments += frame.recoveredFragments
-                lastUsable = SystemClock.elapsedRealtime()
                 if (acknowledge && !frame.partial) current?.let { acknowledgeFrame(udp, session, it.id) }
-                onFrame(frame)
+                onFrame(if (playoutInterval > 0) frame.copy(playoutIntervalMs = playoutInterval) else frame)
             }
             while (active() && !Thread.currentThread().isInterrupted) {
                 val now = SystemClock.elapsedRealtime()
                 if (now - heartbeat >= 1000 || heartbeat == 0L) {
-                    control(udp, session, 1); heartbeat = now
+                    if (feedback) {
+                        val report = reception.packet(session, now)
+                        udp.send(DatagramPacket(report, report.size))
+                        reception.resetWindow()
+                    } else control(udp, session, 1)
+                    heartbeat = now
                 }
                 if (now - statsAt >= 2000) {
                     Log.i("AnnyLensStream", "UDP complete_frames=$completeFrames partial_candidates=$partialFrames recovered_fragments=$repairedFragments dropped_frames=$droppedFrames interval_ms=${now - statsAt}")
                     statsAt = now; completeFrames = 0; droppedFrames = 0; partialFrames = 0; repairedFragments = 0
                 }
                 if (now - lastPacket >= 5000) throw IOException("UDP has no packets")
-                if (now - lastUsable >= 15000) throw IOException("UDP has no usable images")
+                if (!reception.hasUsableImage(now, lastDecodedAt())) throw IOException("UDP has no usable images")
+                // END follows the data/FEC packets. Allow brief reordering,
+                // then show the intact prefix instead of freezing for a full JPEG.
+                if (LocalLensPartialDeadline.expired(now, framePacketAt, frameEndAt)) {
+                    current?.takeUnless { it.finished }?.let { deliver(it.finish()) }
+                }
                 packet.length = packetBytes.size
                 try { udp.receive(packet) } catch (_: SocketTimeoutException) {
-                    // Hotspot firmware can spend 120 ms sending/retrying a frame.
-                    // Give its tail/parity time to arrive before closing a partial JPEG.
-                    // A newer frame still releases the previous image immediately.
-                    if (SystemClock.elapsedRealtime() - framePacketAt >= 250) {
-                        current?.takeUnless { it.finished }?.let { deliver(it.finish()) }
-                    }
                     continue
                 }
                 val receivedAt = SystemClock.elapsedRealtime()
@@ -160,15 +168,17 @@ internal object LocalLensUdp {
                 if (newest == null || id - newest.id > 0) {
                     // Publish the best recoverable part immediately when the next image arrives.
                     newest?.takeUnless { it.finished }?.let { deliver(it.finish()) }
+                    if (newest != null) reception.skipped(id - newest.id - 1)
                     current = LocalLensUdpFrame(id, length, count, groupSize)
                     framePacketAt = receivedAt
+                    frameEndAt = null
                 } else if (id != newest.id) continue
                 val assembling = current ?: continue
                 if (assembling.length != length || assembling.count != count) continue
                 framePacketAt = receivedAt
-                // END does not discard late repair packets. The next frame or short gap releases it.
+                // Keep accepting tail/parity packets during the short END grace.
                 val ready = when {
-                    isEnd -> null
+                    isEnd -> { if (frameEndAt == null) frameEndAt = receivedAt; null }
                     isParity -> assembling.addParity(index - 0x8000, packetBytes, HEADER, size - HEADER)
                     else -> assembling.add(index, packetBytes, HEADER, size - HEADER)
                 }

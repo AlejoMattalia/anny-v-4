@@ -8,6 +8,8 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  AppState,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -32,9 +34,10 @@ export type WifiLensCameraHandle = {capture: () => Promise<string>};
 /** Camera adapter for the lente-wifi-2 firmware, shared with v3. */
 const WifiLensCamera = forwardRef<
   WifiLensCameraHandle,
-  {onReady: (ready: boolean) => void}
->(({onReady}, ref) => {
-  const focused = useIsFocused();
+  {onReady: (ready: boolean) => void; active?: boolean; onBackgroundReady?: (ready: boolean) => void}
+>(({onReady, active = true, onBackgroundReady}, ref) => {
+  const screenFocused = useIsFocused();
+  const focused = screenFocused && active;
   const {trackWifiLensCamera, wifiLensConnection} = useContext(WifiLensContext);
   const reconnecting = wifiLensConnection.phase === 'searching' || wifiLensConnection.phase === 'connecting';
   const verifiedSSID = useRef('');
@@ -46,16 +49,35 @@ const WifiLensCamera = forwardRef<
   const [attempt, setAttempt] = useState(0);
   const operations = useRef(new Set<AbortController>());
   const readyCallback = useRef(onReady);
+  const backgroundCallback = useRef(onBackgroundReady);
+  useEffect(() => { backgroundCallback.current = onBackgroundReady; }, [onBackgroundReady]);
   useEffect(() => { readyCallback.current = onReady; }, [onReady]);
 
   useEffect(() => {
-    if (!focused || !session) return;
+    backgroundCallback.current?.(false);
+    if (!focused) return;
     const owner = streamOwner.current;
-    void startGlassesStreamingService(owner).catch(error =>
-      console.warn('[WifiLensCamera] Could not keep stream active in background:', error),
-    );
-    return () => { void stopGlassesStreamingService(owner); };
-  }, [focused, session]);
+    let cancelled = false;
+    const start = () => {
+      if (cancelled || AppState.currentState !== 'active') return;
+      void startGlassesStreamingService(owner).then(() => {
+        if (!cancelled) backgroundCallback.current?.(Platform.OS === 'android');
+      }).catch(error => {
+        if (!cancelled) backgroundCallback.current?.(false);
+        console.warn('[WifiLensCamera] Could not keep stream active in background:', error);
+      });
+    };
+    start();
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') start(); });
+    return () => {
+      cancelled = true;
+      subscription.remove();
+      backgroundCallback.current?.(false);
+      void stopGlassesStreamingService(owner);
+    };
+    // Own the service for the active camera, including discovery/reconnect.
+    // Replacing a session must not stop/restart HeadlessJS underneath it.
+  }, [focused]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -86,8 +108,9 @@ const WifiLensCamera = forwardRef<
           throw new Error('La cámara de los lentes no está disponible.');
         }
         const connected = {...pair, address: found.address};
-        if (connected.networkType !== 'hotspot' && hasLocalLensTransport()) {
-          // Prefer the fluid VGA profile; do not overload Wi-Fi with detail JPEGs.
+        if (hasLocalLensTransport()) {
+          // Ask for fluid on both networks: a saved detail profile can saturate
+          // an own-phone hotspot. The firmware chooses the network's dimensions.
           // Older firmware may lack this endpoint; video remains available.
           await requestLocalLens(`${connected.address}/api/camera`, connected.password,
             'profile=fluid', 5000, controller.signal).catch(() => undefined);
@@ -181,7 +204,7 @@ const WifiLensCamera = forwardRef<
         />
       ) : (
         <View style={styles.message}>
-          {error ? (
+          {!active ? <Text style={styles.text}>Streaming pausado</Text> : error ? (
             <>
               <Text style={styles.text} accessibilityLiveRegion="polite">
                 {error}

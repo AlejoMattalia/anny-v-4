@@ -3,6 +3,7 @@ import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { Alert, Linking } from 'react-native';
 
 import { loadSettings } from '@/lib/settings-storage';
+import { streamingDelay, streamingTimeout } from '@/services/StreamingClock';
 
 type ListenOptions = {
   prompt?: string;
@@ -31,7 +32,7 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
 
   await new Promise<void>((resolve) => {
     let settled = false;
-    const fallbackTimeout = setTimeout(() => finish(), Math.max(10000, text.length * 150 / (settings.voiceRate || 1)));
+    const cancelFallback = streamingTimeout(() => finish(), Math.max(10000, text.length * 150 / (settings.voiceRate || 1)));
 
     function finish() {
       if (settled) {
@@ -39,7 +40,7 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
       }
 
       settled = true;
-      clearTimeout(fallbackTimeout);
+      cancelFallback();
       resolve();
     }
 
@@ -58,7 +59,7 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
     });
   });
 
-  await wait(250);
+  await streamingDelay(250);
 }
 
 export async function stopSpeaking() {
@@ -215,8 +216,4 @@ function showMicrophonePermissionAlert() {
       },
     ],
   );
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

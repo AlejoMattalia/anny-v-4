@@ -11,18 +11,26 @@ import android.util.Log
 import android.os.SystemClock
 import android.view.Gravity
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.TextView
 import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
+import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.annotations.ReactProp
-import com.facebook.react.uimanager.events.RCTEventEmitter
+import com.facebook.react.uimanager.events.Event
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import java.io.BufferedInputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+
+private class LensStreamEvent(surfaceId: Int, viewId: Int, private val name: String) :
+    Event<LensStreamEvent>(surfaceId, viewId) {
+    override fun getEventName() = name
+    override fun getEventData(): WritableMap = Arguments.createMap()
+}
 
 /** Drain the MJPEG socket independently of decoding and display only the latest frame. */
 class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
@@ -34,13 +42,17 @@ class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
     private var worker: Thread? = null
     private var decoder: Thread? = null
     private var framesOwner: Any? = null
-    private var queuedBitmap: AtomicReference<Bitmap?>? = null
     private var wifiLock: WifiManager.WifiLock? = null
-    private val image = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.BLACK) }
+    private val image = LocalLensSurface(context)
     private val status = TextView(context).apply { setTextColor(Color.WHITE); setBackgroundColor(0x99000000.toInt()); setPadding(18, 10, 18, 10); text = "Conectando video…" }
     init {
         addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(status, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START))
+    }
+    private fun emitStreamEvent(name: String) {
+        val reactContext = context as ThemedReactContext
+        UIManagerHelper.getEventDispatcher(reactContext)?.dispatchEvent(
+            LensStreamEvent(UIManagerHelper.getSurfaceId(this), id, name))
     }
     fun stop() {
         generation++
@@ -54,8 +66,6 @@ class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
         decoder = null
         framesOwner?.let { LocalLensFrames.clear(it) }
         framesOwner = null
-        queuedBitmap?.getAndSet(null)?.recycle()
-        queuedBitmap = null
         activeConfig = ""
     }
     fun refresh() {
@@ -86,30 +96,40 @@ class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
         val owner = Any()
         framesOwner = owner
         LocalLensFrames.begin(owner, target, secret)
-        val pendingFrame = AtomicReference<LocalLensVideoFrame?>(null)
-        val pendingBitmap = AtomicReference<Bitmap?>(null)
-        queuedBitmap = pendingBitmap
-        val available = Semaphore(0)
-        val drawing = AtomicBoolean(false)
+        val frameMonitor = Object()
+        val pendingFrames = LocalLensFrameQueue()
+        val lastDecodedAt = AtomicLong(0)
+        val noticePending = AtomicBoolean(false)
         var announcedReady = false // Accessed only by posted UI callbacks.
-        var lastFrameNotice = 0L // Throttle bridge events, not the video.
+        var lastFrameNotice = 0L // Decoder-owned; throttle UI notices, not the video.
         var displayStatsAt = 0L
         var displayedFrames = 0
+        var displayedPartials = 0
+        var lastDisplayedAt = 0L
+        var maxDisplayGap = 0L
+        var maxDrawMs = 0L
+        var maxBufferMs = 0L
         status.text = "Conectando video…"
 
         decoder = Thread {
             var lastDecodeWarning = 0L
-            var lastCompleteAt: Long? = null
             fun decode(jpeg: ByteArray): Bitmap? = try {
                 BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
             } catch (_: IllegalArgumentException) { null }
             try {
                 while (generation == token && !Thread.currentThread().isInterrupted) {
-                    available.acquire()
-                    available.drainPermits()
-                    val frame = pendingFrame.getAndSet(null) ?: continue
+                    val frame = synchronized(frameMonitor) {
+                        var next: LocalLensVideoFrame? = null
+                        while (generation == token && next == null) {
+                            val now = SystemClock.elapsedRealtime()
+                            next = pendingFrames.poll(now)
+                            if (next == null) frameMonitor.wait(pendingFrames.waitMs(now))
+                        }
+                        maxBufferMs = maxOf(maxBufferMs, pendingFrames.lastAgeMs)
+                        next
+                    } ?: break
                     if (generation != token) break
-                    if (!LocalLensFramePolicy.shouldDecode(frame, SystemClock.elapsedRealtime(), lastCompleteAt)) continue
+                    if (!LocalLensFramePolicy.shouldDecode(frame)) continue
                     var readableJpeg = frame.jpeg
                     val bitmap = decode(readableJpeg) ?: frame.prefix?.let { prefix ->
                         readableJpeg = prefix
@@ -124,38 +144,41 @@ class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
                         continue
                     }
                     if (generation != token) { bitmap.recycle(); break }
-                    if (!frame.partial && readableJpeg === frame.jpeg) lastCompleteAt = SystemClock.elapsedRealtime()
+                    lastDecodedAt.set(SystemClock.elapsedRealtime())
                     LocalLensFrames.publish(owner, readableJpeg, frame.partial || readableJpeg !== frame.jpeg)
-                    // Replaced pending bitmaps have never reached the ImageView.
-                    pendingBitmap.getAndSet(bitmap)?.recycle()
-                    if (generation != token) { pendingBitmap.getAndSet(null)?.recycle(); break }
-                    if (drawing.compareAndSet(false, true)) {
-                        postOnAnimation {
-                            drawing.set(false)
-                            val latest = pendingBitmap.getAndSet(null)
-                            if (latest != null) {
-                                if (generation == token) {
-                                    image.setImageBitmap(latest)
-                                    if (status.text != "En vivo") status.text = "En vivo"
-                                    val now = SystemClock.elapsedRealtime()
-                                    if (displayStatsAt == 0L) displayStatsAt = now
-                                    displayedFrames++
-                                    if (now - displayStatsAt >= 2000) {
-                                        Log.i("AnnyLensStream", "DISPLAY frames=$displayedFrames interval_ms=${now - displayStatsAt}")
-                                        displayedFrames = 0
-                                        displayStatsAt = now
-                                    }
-                                    if (!announcedReady || now - lastFrameNotice >= 2000) {
-                                        lastFrameNotice = now
-                                        (context as ThemedReactContext).getJSModule(RCTEventEmitter::class.java)
-                                            .receiveEvent(id, "topStreamFrame", null)
-                                    }
-                                    if (!announcedReady) {
-                                        announcedReady = true
-                                        (context as ThemedReactContext).getJSModule(RCTEventEmitter::class.java)
-                                            .receiveEvent(id, "topStreamReady", null)
-                                    }
-                                } else latest.recycle()
+                    val drawAt = SystemClock.elapsedRealtime()
+                    // SurfaceView has its own buffer queue. No per-frame work is
+                    // posted to React's main thread, even while AI updates the UI.
+                    // Hardware Canvas owns bitmap references until GPU work ends;
+                    // do not recycle a bitmap that has been submitted to it.
+                    if (!image.display(bitmap) { generation == token }) continue
+                    val now = SystemClock.elapsedRealtime()
+                    maxDrawMs = maxOf(maxDrawMs, now - drawAt)
+                    if (displayStatsAt == 0L) displayStatsAt = now
+                    if (lastDisplayedAt != 0L) maxDisplayGap = maxOf(maxDisplayGap, now - lastDisplayedAt)
+                    lastDisplayedAt = now
+                    displayedFrames++
+                    if (frame.partial) displayedPartials++
+                    if (now - displayStatsAt >= 2000) {
+                        Log.i("AnnyLensStream", "DISPLAY frames=$displayedFrames interval_ms=${now - displayStatsAt} partial_frames=$displayedPartials max_gap_ms=$maxDisplayGap max_draw_ms=$maxDrawMs max_buffer_ms=$maxBufferMs renderer=surface")
+                        displayedFrames = 0
+                        displayedPartials = 0
+                        displayStatsAt = now
+                        maxDisplayGap = 0
+                        maxDrawMs = 0
+                        maxBufferMs = 0
+                    }
+                    if ((lastFrameNotice == 0L || now - lastFrameNotice >= 2000) && noticePending.compareAndSet(false, true)) {
+                        lastFrameNotice = now
+                        post {
+                            noticePending.set(false)
+                            if (generation == token) {
+                                if (status.text != "En vivo") status.text = "En vivo"
+                                emitStreamEvent("topStreamFrame")
+                                if (!announcedReady) {
+                                    announcedReady = true
+                                    emitStreamEvent("topStreamReady")
+                                }
                             }
                         }
                     }
@@ -163,27 +186,28 @@ class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
             } catch (_: InterruptedException) {
                 // Closing the screen interrupts a decoder waiting for a frame.
             } finally {
-                pendingFrame.set(null)
-                if (generation != token) pendingBitmap.getAndSet(null)?.recycle()
+                synchronized(frameMonitor) { pendingFrames.clear() }
             }
         }.apply { name = "AnnyLensDecode"; start() }
 
         val deliver: (LocalLensVideoFrame) -> Unit = { frame ->
             if (generation == token) {
-                val previous = pendingFrame.getAndUpdate { queued -> LocalLensFramePolicy.next(queued, frame) }
-                if (previous == null) available.release()
+                synchronized(frameMonitor) {
+                    pendingFrames.offer(frame, SystemClock.elapsedRealtime())
+                    frameMonitor.notifyAll()
+                }
             }
         }
         worker = Thread {
             try {
                 LocalLensUdp.receive(context, target, secret, socketRef,
-                    { generation == token && !Thread.currentThread().isInterrupted }, deliver)
+                    { generation == token && !Thread.currentThread().isInterrupted }, { lastDecodedAt.get() }, deliver)
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
             } catch (error: Exception) {
                 if (generation == token) {
                     LocalLensFrames.invalidate(owner)
-                    pendingFrame.set(null)
+                    synchronized(frameMonitor) { pendingFrames.clear() }
                     post { if (generation == token) status.text = "Reconectando video…" }
                     Log.w("AnnyLensStream", "UDP unavailable; falling back to MJPEG: ${error.javaClass.simpleName}")
                 }
@@ -247,7 +271,7 @@ class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
                 } catch (error: Exception) {
                     if (generation == token) {
                         LocalLensFrames.invalidate(owner)
-                        pendingFrame.set(null)
+                        synchronized(frameMonitor) { pendingFrames.clear() }
                         Log.w("AnnyLensStream", "Stream interrupted: ${error.javaClass.simpleName}")
                         post { if (generation == token) status.text = "Reconectando video…" }
                     }

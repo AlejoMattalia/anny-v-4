@@ -4,6 +4,7 @@ internal data class LocalLensVideoFrame(
     val jpeg: ByteArray, val partial: Boolean, val prefix: ByteArray? = null,
     val recoveredFragments: Int = 0,
     val intactRatio: Float = 1f,
+    val playoutIntervalMs: Int = 0,
 )
 
 /** Recover one lost fragment per XOR group; otherwise decode only the intact prefix. */

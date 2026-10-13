@@ -9,6 +9,7 @@ import {
   Animated,
   AppState,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -29,6 +30,8 @@ import WifiLensCamera, { type WifiLensCameraHandle } from '@/components/WifiLens
 import { useWifiLens } from '@/context/wifi-lens-context';
 import { useWifiLensButtons } from '@/context/useWifiLensButtons';
 import { listenOnce, speak, stopListening, stopSpeaking } from '@/lib/voice';
+import { canRunStreaming } from '@/services/StreamingActivity';
+import { streamingInterval } from '@/services/StreamingClock';
 
 type CameraSource = 'glasses' | 'phone';
 type ExpoCameraModule = typeof import('expo-camera');
@@ -50,6 +53,7 @@ export default function RealtimeStreamingScreen() {
   const [modePickerOpen, setModePickerOpen] = useState(false);
   const focused = useIsFocused();
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
+  const [backgroundReady, setBackgroundReady] = useState(false);
   const [pulse] = useState(() => new Animated.Value(1));
   const [cameraModule, setCameraModule] = useState<ExpoCameraModule | null>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
@@ -71,22 +75,27 @@ export default function RealtimeStreamingScreen() {
   );
 
   useEffect(() => {
-    activeRef.current = focused && AppState.currentState === 'active';
-    return () => {
-      activeRef.current = false;
+    activeRef.current = canRunStreaming(focused, foreground, source, Platform.OS === 'android', backgroundReady);
+    if (!activeRef.current) {
+      modeGeneration.current++;
+      awaitingResponseRef.current = false;
+      speakingRef.current = false;
       stopListening();
       void stopSpeaking();
-    };
-  }, [focused]);
+    }
+  }, [focused, foreground, source, backgroundReady]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      activeRef.current = focused && state === 'active';
+      activeRef.current = canRunStreaming(focused, state === 'active', source, Platform.OS === 'android', backgroundReady);
       setForeground(state === 'active');
-      if (state !== 'active') { stopListening(); void stopSpeaking(); }
+      if (state !== 'active') {
+        stopListening();
+        if (!activeRef.current) void stopSpeaking();
+      }
     });
     return () => subscription.remove();
-  }, [focused]);
+  }, [focused, source, backgroundReady]);
 
   const finishAnalysis = useCallback((generation: number) => {
     if (generation !== modeGeneration.current) return;
@@ -130,6 +139,7 @@ export default function RealtimeStreamingScreen() {
     if (
       !mountedRef.current ||
       !activeRef.current ||
+      !streamingRef.current ||
       awaitingResponseRef.current ||
       speakingRef.current || modePickerOpen
     ) {
@@ -161,7 +171,7 @@ export default function RealtimeStreamingScreen() {
         image = `data:image/jpeg;base64,${await wifiCameraRef.current.capture()}`;
       }
 
-      if (!mountedRef.current || !activeRef.current || generation !== modeGeneration.current) {
+      if (!mountedRef.current || !activeRef.current || !streamingRef.current || generation !== modeGeneration.current) {
         finishAnalysis(generation);
         return;
       }
@@ -172,9 +182,14 @@ export default function RealtimeStreamingScreen() {
       if (!mountedRef.current || !activeRef.current || !streamingRef.current || generation !== modeGeneration.current) return;
       setDescription(text);
       setStatusMessage('Streaming en tiempo real');
+      console.info(`[AnnyStreaming] analysis_completed source=${source} app_state=${AppState.currentState}`);
       speakingRef.current = true;
-      await speak(text);
-      if (generation === modeGeneration.current) speakingRef.current = false;
+      try {
+        await speak(text);
+        console.info(`[AnnyStreaming] speech_finished app_state=${AppState.currentState}`);
+      } finally {
+        if (generation === modeGeneration.current) speakingRef.current = false;
+      }
     } catch (error) {
       finishAnalysis(generation);
       if (!mountedRef.current || generation !== modeGeneration.current) return;
@@ -217,15 +232,11 @@ export default function RealtimeStreamingScreen() {
   }, [pulse]);
 
   useEffect(() => {
-    if (!focused || !foreground || !isStreaming || !isConnected || isListening || modePickerOpen || streamError) return;
+    if (!canRunStreaming(focused, foreground, source, Platform.OS === 'android', backgroundReady) ||
+        !isStreaming || !isConnected || isListening || modePickerOpen || streamError) return;
 
-    const firstCapture = setTimeout(() => void captureAndSend(), 900);
-    const interval = setInterval(() => void captureAndSend(), CAPTURE_INTERVAL_MS);
-    return () => {
-      clearTimeout(firstCapture);
-      clearInterval(interval);
-    };
-  }, [captureAndSend, focused, foreground, isConnected, isListening, isStreaming, streamError, activeMode, modePickerOpen]);
+    return streamingInterval(() => void captureAndSend(), CAPTURE_INTERVAL_MS, 900);
+  }, [captureAndSend, focused, foreground, source, backgroundReady, isConnected, isListening, isStreaming, streamError, activeMode, modePickerOpen]);
 
   async function toggleCameraSource() {
     if (source === 'glasses') {
@@ -254,6 +265,10 @@ export default function RealtimeStreamingScreen() {
 
       setCameraModule(module);
       setHasCameraPermission(true);
+      modeGeneration.current++;
+      awaitingResponseRef.current = false;
+      speakingRef.current = false;
+      setBackgroundReady(false);
       setSource('phone');
       setStreamError('');
       setIsCameraReady(false);
@@ -262,6 +277,9 @@ export default function RealtimeStreamingScreen() {
       return;
     }
 
+    modeGeneration.current++;
+    awaitingResponseRef.current = false;
+    speakingRef.current = false;
     setSource('glasses');
     setIsCameraReady(false);
     void speak('Cambiando a cámara de los lentes.');
@@ -269,7 +287,7 @@ export default function RealtimeStreamingScreen() {
   }
 
   async function askAnny() {
-    if (isListening || !isStreaming) return;
+    if (AppState.currentState !== 'active' || isListening || !isStreaming) return;
     const generation = modeGeneration.current;
     setIsListening(true);
     setStatusMessage('Te escucho…');
@@ -301,6 +319,10 @@ export default function RealtimeStreamingScreen() {
     const nextStreaming = !isStreaming;
     streamingRef.current = nextStreaming;
     setIsStreaming(nextStreaming);
+    modeGeneration.current++;
+    awaitingResponseRef.current = false;
+    speakingRef.current = false;
+    setIsAnalyzing(false);
     if (!nextStreaming && isListening) {
       stopListening();
       setIsListening(false);
@@ -320,7 +342,7 @@ export default function RealtimeStreamingScreen() {
     <View style={styles.screen}>
       <StatusBar hidden />
 
-      {source === 'phone' && hasCameraPermission && PhoneCameraView ? (
+      {source === 'phone' && focused && foreground && hasCameraPermission && PhoneCameraView ? (
         <PhoneCameraView
           facing="back"
           flash="off"
@@ -334,7 +356,8 @@ export default function RealtimeStreamingScreen() {
 
       {source === 'glasses' ? (
         <View style={styles.preview}>
-          <WifiLensCamera key={cameraAttempt} ref={wifiCameraRef} onReady={handleWifiReady} />
+          <WifiLensCamera key={cameraAttempt} ref={wifiCameraRef} onReady={handleWifiReady}
+            active={isStreaming} onBackgroundReady={setBackgroundReady} />
         </View>
       ) : null}
 

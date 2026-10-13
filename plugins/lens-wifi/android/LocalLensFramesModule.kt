@@ -3,6 +3,8 @@ package com.anonymous.annyv4.lenswifi
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.SystemClock
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -104,7 +106,15 @@ internal object LocalLensFrames {
 
 class LocalLensFramesModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
     private val captures = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(1))
+    private val clock = Handler(Looper.getMainLooper())
     override fun getName() = "LocalLensFrames"
+
+    // Handler deadlines do not depend on display vsync. The streaming
+    // foreground service owns the CPU wake lock while the screen is off.
+    @ReactMethod
+    fun delay(milliseconds: Double, promise: Promise) {
+        clock.postDelayed({ promise.resolve(null) }, milliseconds.toLong().coerceIn(0, 120000))
+    }
 
     @ReactMethod
     fun getLatestFrame(endpoint: String, credential: String, promise: Promise) {
@@ -125,6 +135,7 @@ class LocalLensFramesModule(context: ReactApplicationContext) : ReactContextBase
         } catch (_: RejectedExecutionException) {promise.reject("E_LENS_BUSY", "Ya hay una captura en curso.")}
     }
     override fun invalidate() {
+        clock.removeCallbacksAndMessages(null)
         captures.shutdownNow()
         super.invalidate()
     }
