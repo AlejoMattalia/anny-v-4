@@ -58,7 +58,9 @@ export default function RealtimeStreamingScreen() {
   const [cameraModule, setCameraModule] = useState<ExpoCameraModule | null>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
 
-  const [source, setSource] = useState<CameraSource>('glasses');
+  const [source, setSource] = useState<CameraSource>(() =>
+    wifiLensConnection.phase === 'connected' && wifiLensConnection.session ? 'glasses' : 'phone',
+  );
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(true);
@@ -233,55 +235,71 @@ export default function RealtimeStreamingScreen() {
 
   useEffect(() => {
     if (!canRunStreaming(focused, foreground, source, Platform.OS === 'android', backgroundReady) ||
-        !isStreaming || !isConnected || isListening || modePickerOpen || streamError) return;
+        !isStreaming || !isConnected || isListening || modePickerOpen || streamError ||
+        (source === 'phone' ? !isCameraReady : isPreparingGlasses)) return;
 
     return streamingInterval(() => void captureAndSend(), CAPTURE_INTERVAL_MS, 900);
-  }, [captureAndSend, focused, foreground, source, backgroundReady, isConnected, isListening, isStreaming, streamError, activeMode, modePickerOpen]);
+  }, [captureAndSend, focused, foreground, source, backgroundReady, isConnected, isListening, isStreaming, streamError, activeMode, modePickerOpen, isCameraReady, isPreparingGlasses]);
 
-  async function toggleCameraSource() {
-    if (source === 'glasses') {
-      let module = cameraModule;
-      try {
-        module ??= await import('expo-camera');
-      } catch (error) {
-        const message = /ExpoCamera|native module/i.test(getErrorMessage(error))
-          ? 'La cámara del celular requiere recompilar e instalar la app. Mientras tanto podés usar la cámara de los lentes.'
-          : getErrorMessage(error);
-        Alert.alert('Cámara no disponible', message);
-        return;
-      }
+  useEffect(() => {
+    if (source !== 'phone') return;
+    let cancelled = false;
 
-      const currentPermission = await module.Camera.getCameraPermissionsAsync();
-      const permission = currentPermission.granted
-        ? currentPermission
-        : await module.Camera.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          'Permiso de cámara',
-          'Anny necesita usar la cámara para describir lo que tenés delante.',
-        );
-        return;
-      }
-
-      setCameraModule(module);
-      setHasCameraPermission(true);
-      modeGeneration.current++;
-      awaitingResponseRef.current = false;
-      speakingRef.current = false;
-      setBackgroundReady(false);
-      setSource('phone');
+    async function preparePhoneCamera() {
       setStreamError('');
       setIsCameraReady(false);
+      try {
+        const module = await import('expo-camera');
+        if (cancelled) return;
+        const currentPermission = await module.Camera.getCameraPermissionsAsync();
+        if (cancelled) return;
+        const permission = currentPermission.granted
+          ? currentPermission
+          : await module.Camera.requestCameraPermissionsAsync();
+        if (cancelled) return;
+        if (!permission.granted) {
+          setHasCameraPermission(false);
+          setStreamError('Anny necesita permiso de cámara para describir lo que tenés delante.');
+          Alert.alert(
+            'Permiso de cámara',
+            'Activá el permiso de cámara de Anny en los ajustes del celular.',
+          );
+          return;
+        }
+
+        setCameraModule(module);
+        setHasCameraPermission(true);
+      } catch (error) {
+        if (cancelled) return;
+        setStreamError(/ExpoCamera|native module/i.test(getErrorMessage(error))
+          ? 'La cámara del celular requiere recompilar e instalar la app. Mientras tanto podés usar la cámara de los lentes.'
+          : getErrorMessage(error));
+      }
+    }
+
+    void preparePhoneCamera();
+    return () => { cancelled = true; };
+  }, [source, cameraAttempt]);
+
+  async function toggleCameraSource() {
+    modeGeneration.current++;
+    awaitingResponseRef.current = false;
+    speakingRef.current = false;
+    stopListening();
+    setIsListening(false);
+    setIsAnalyzing(false);
+    setBackgroundReady(false);
+    setIsCameraReady(false);
+    setStreamError('');
+
+    if (source === 'glasses') {
+      setSource('phone');
       setStatusMessage(isConnected ? 'Streaming con cámara del celular' : 'Conectando con Anny…');
       void speak('Cambiando a cámara del celular.');
       return;
     }
 
-    modeGeneration.current++;
-    awaitingResponseRef.current = false;
-    speakingRef.current = false;
     setSource('glasses');
-    setIsCameraReady(false);
     void speak('Cambiando a cámara de los lentes.');
     await prepareGlasses();
   }
@@ -344,6 +362,7 @@ export default function RealtimeStreamingScreen() {
 
       {source === 'phone' && focused && foreground && hasCameraPermission && PhoneCameraView ? (
         <PhoneCameraView
+          key={cameraAttempt}
           facing="back"
           flash="off"
           mode="picture"
@@ -366,11 +385,11 @@ export default function RealtimeStreamingScreen() {
           <MaterialCommunityIcons color="#FF6674" name="video-off-outline" size={62} />
           <Text style={styles.centerTitle}>Cámara no disponible</Text>
           <Text style={styles.centerSubtitle}>{streamError}</Text>
-          {source === 'glasses' ? (
-            <Pressable onPress={() => void prepareGlasses()} style={styles.retryButton}>
-              <Text style={styles.retryText}>REINTENTAR</Text>
-            </Pressable>
-          ) : null}
+          <Pressable
+            onPress={() => source === 'glasses' ? void prepareGlasses() : setCameraAttempt(attempt => attempt + 1)}
+            style={styles.retryButton}>
+            <Text style={styles.retryText}>REINTENTAR</Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -448,7 +467,6 @@ export default function RealtimeStreamingScreen() {
               tone="accent"
             />
             <ControlButton
-              disabled={isPreparingGlasses}
               icon={source === 'phone' ? 'glasses' : 'cellphone'}
               label={source === 'phone' ? 'LENTES' : 'CELULAR'}
               onPress={() => void toggleCameraSource()}

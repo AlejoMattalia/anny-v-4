@@ -21,6 +21,10 @@ Celular solicita permiso de cámara y utiliza la cámara trasera, tanto para el
 escaneo automático como para el botón de captura. Al cambiar de cámara se
 limpian el resultado y la voz anteriores; la cámara del celular se libera al
 salir de la pantalla o enviar Anny a segundo plano.
+Al abrir Streaming sin lentes conectados, se activa automáticamente la cámara
+trasera del celular y se solicita permiso si hace falta. Con lentes conectados,
+se usa su cámara. El botón **Lentes / Celular** permite cambiar manualmente,
+incluso mientras se intenta conectar la cámara de los lentes.
 Streaming envía `set_mode` y `analyze` con el modo elegido, consulta breve y
 `requestId`; recibe `description`. Pide una frase completa de hasta 20 palabras.
 El selector ofrece Viaje, Facultad, Supermercado, Deporte y Seguro, con las
