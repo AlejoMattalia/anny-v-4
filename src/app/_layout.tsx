@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { WifiLensProvider } from '@/context/wifi-lens-context';
+import { AssistanceProvider } from '@/context/assistance-context';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ScreenVoiceAnnouncer } from '@/components/screen-voice-announcer';
 import { warmCurrentLocation } from '@/lib/current-location';
@@ -41,6 +42,7 @@ export default function RootLayout() {
           notification: '#6A0DAD',
         },
       }}>
+      <AssistanceProvider>
       <WifiLensProvider>
       <AnimatedSplashOverlay />
       <StatusBar style="dark" />
@@ -53,6 +55,7 @@ export default function RootLayout() {
         }}
       />
       </WifiLensProvider>
+      </AssistanceProvider>
     </ThemeProvider>
   );
 }

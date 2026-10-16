@@ -1,5 +1,55 @@
 # Welcome to your Expo app 👋👋
 
+## Asistencia remota y cuenta tutor
+
+Inicio, Ayuda y el botón de asistencia de Viaje → Ayuda y SOS abren la
+asistencia de familiar o tutor. La sesión existente determina el rol `PDV`
+o `TUTOR`; el tutor tiene un acceso a solicitudes y personas vinculadas.
+En el menú, **Tutores y personas vinculadas** permite agregar una cuenta por
+correo/código, editar su nombre y desvincularla. El PDV también puede invitar
+a un tutor que todavía no tenga cuenta.
+
+Se conserva el protocolo de `anny-app-v3`: `/group/list-mobile`,
+`/group/add-user-chat`, `/notification/help`, `help-accepted`, `help-ignored`,
+`response-camera`, `pending-camera` y `finalize-help`. El PDV envía su ubicación;
+el tutor acepta, puede verla en el mapa e inicia la videollamada. OneSignal
+identifica la instalación con el tag `user_id`, igual que v3. Activar **Avisos de
+asistencia** en el teléfono del tutor; al cerrar sesión se retira esa asociación.
+Mientras espera, el PDV consulta la respuesta de cámara cada dos segundos por
+un máximo de 65 segundos. Cancelar impide abrir llamadas por respuestas tardías.
+
+La llamada utiliza Voximplant y los mensajes `SHOW_GLASSES` / `SHOW_CAMERA`
+de v3. Permite audio, video del celular y cambio a los lentes WiFi. El celular
+del PDV envía cuadros completos de los lentes a `/frame/{port}` y el tutor ve
+`/video_feed/{port}/{code}`. Sin lentes o tras fallos de envío se usa la cámara
+del celular. Finalizar o salir libera la llamada y la reserva de video. El
+envío de cuadros de lentes requiere Anny en primer plano; no se garantiza
+continuidad de la llamada con el teléfono bloqueado.
+
+Las variables de `.env.example` incluyen los servidores de grupos/avisos,
+el App ID de OneSignal y las cuentas Voximplant de cada rol (usuario completo,
+incluido `@aplicacion.cuenta.voximplant.com`). En esta copia local se trasladó
+la configuración de v3 al `.env` ignorado por Git. Las cuentas de llamadas de
+v3 son compartidas por rol: conservan esa limitación para llamadas simultáneas;
+no implementan credenciales individuales por usuario. Las variables
+`EXPO_PUBLIC_*` se incluyen en el cliente y no son secretos de servidor.
+
+Requiere reconstruir la app nativa; no funciona en Expo Go ni en la versión
+web. `onesignal-expo-plugin` conserva la configuración al ejecutar prebuild
+(modo APNs `development`; cambiar a `production` para distribución iOS).
+
+```bash
+npm run test:assistance
+npx expo prebuild --platform android --no-install
+npm run android
+```
+
+Prueba entre dos teléfonos: ingresar como PDV y TUTOR, vincular sus cuentas,
+habilitar avisos en el tutor, pedir ayuda desde el PDV, aceptar y comenzar la
+videollamada desde el tutor. Verificar audio, ubicación, cambio Celular/Lentes
+y finalización desde cualquiera de los dos. Las pruebas automáticas simulan
+los servicios; la entrega real de push y el audio/video requieren esa prueba.
+
 ## Lentes WiFi: integración de anny-app-v3
 
 Inicio y Dispositivos usan el mismo gestor `WifiLensConnectionManager` de v3:
@@ -8,6 +58,14 @@ sincronización con el lente, reconexión y confirmación de la conexión real.
 En Dispositivos se agregan, editan y eliminan redes. Guardar una red no
 interrumpe la cámara; Conectar/Cambiar y el switch solicitan el cambio de red.
 BLE configura el firmware `lente-wifi-2`; el video se transmite por WiFi.
+
+Si Android restaura una vinculación cifrada sin su clave de Keystore después
+de reinstalar, Anny vuelve a vincular por Bluetooth usando la red guardada.
+La vinculación anterior se reemplaza sólo al confirmar acceso a los lentes.
+Dispositivos muestra el motivo cuando falla una conexión, además del estado
+que se muestra en Inicio.
+La búsqueda WiFi espera hasta ocho segundos; si Android no responde o limita
+los escaneos, consulta los resultados disponibles para continuar la conexión.
 
 La IA sigue la separación de v3: el escaneo usa `EXPO_PUBLIC_APP_API_IA_URL`
 (Elastic Beanstalk, REST) y streaming usa `EXPO_PUBLIC_REALTIME_AI_URL`

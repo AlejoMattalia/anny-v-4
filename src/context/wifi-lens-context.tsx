@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useWifiLensConnection } from './useWifiLensConnection';
+import { useAssistance } from './assistance-context';
 import SavedNetworksService from '../services/SavedNetworksService';
 import { migrateWifiLens } from '../services/migrateWifiLens';
 import type { LensPairing, LensStatus } from '../services/LocalWifiLens';
@@ -20,11 +21,13 @@ export const WifiLensContext = createContext<LensContext>(null!);
 export const useWifiLens = () => useContext(WifiLensContext);
 
 export function WifiLensProvider({ children }: PropsWithChildren) {
+  const { role, authLoaded } = useAssistance();
   const [initialized, setInitialized] = useState(false);
   const [preference, setPreference] = useState<NetworkType>('wifi');
   const [networks, setNetworks] = useState<SavedNetwork[]>([]);
   // Keep the exact v3 owner for startup, roaming, foregrounding and explicit handoffs.
-  const { connection, manager } = useWifiLensConnection(initialized, preference, initialized);
+  const enabled = initialized && authLoaded && role !== 'TUTOR';
+  const { connection, manager } = useWifiLensConnection(enabled, preference, enabled);
   useEffect(() => {
     let active = true;
     async function reload() {

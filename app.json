@@ -11,7 +11,8 @@
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSContactsUsageDescription": "Anny necesita acceder a tus contactos para mostrar tu agenda y ayudarte a llamar a tus contactos.",
-        "NSLocationWhenInUseUsageDescription": "Anny necesita tu ubicación para decirte dónde estás, mostrar el mapa y encontrar lugares cercanos."
+        "NSLocationWhenInUseUsageDescription": "Anny necesita tu ubicación para decirte dónde estás, mostrar el mapa y encontrar lugares cercanos.",
+        "NSMicrophoneUsageDescription": "Anny necesita el micrófono para hablar con tu tutor durante la asistencia."
       }
     },
     "android": {
@@ -31,6 +32,12 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ],
       "expo-router",
       [
         "react-native-ble-plx",

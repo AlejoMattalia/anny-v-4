@@ -33,19 +33,35 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export const saveLensPairing = (pair: LensPairing): Promise<void> =>
   NativeModules.LocalLensCredentials.set(JSON.stringify(pair));
 export async function loadLensPairing(): Promise<LensPairing | null> {
-  const value = await NativeModules.LocalLensCredentials.get();
+  let value: string | null;
+  try {
+    value = await NativeModules.LocalLensCredentials.get();
+  } catch (error) {
+    // Android can restore encrypted preferences after reinstalling without
+    // restoring their Keystore key. Allow BLE pairing to replace them only
+    // after a new connection is confirmed; keep saved Wi-Fi networks intact.
+    if ((error as {code?: string} | null)?.code !== 'PAIRING_STORAGE') {throw error;}
+    console.warn('[WifiLens] Vinculación segura no disponible; se requiere vincular por Bluetooth.');
+    return null;
+  }
   if (!value) {
     return null;
   }
-  const pair = JSON.parse(value);
-  if (
-    !/^Lentes-[a-f0-9]{6}$/i.test(pair.ap) ||
-    typeof pair.password !== 'string' ||
-    !pair.password
-  ) {
-    throw new Error('Volvé a vincular los lentes.');
+  try {
+    const pair = JSON.parse(value);
+    if (
+      !pair ||
+      !/^Lentes-[a-f0-9]{6}$/i.test(pair.ap) ||
+      typeof pair.password !== 'string' ||
+      !pair.password ||
+      typeof pair.address !== 'string'
+    ) {
+      return null;
+    }
+    return {...pair, address: normalizeLocalLensAddress(pair.address)};
+  } catch {
+    return null;
   }
-  return {...pair, address: normalizeLocalLensAddress(pair.address)};
 }
 export async function lensRequest(
   address: string,

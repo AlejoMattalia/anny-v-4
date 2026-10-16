@@ -27,6 +27,7 @@
     "expo-symbols": "~57.0.0",
     "expo-system-ui": "~57.0.0",
     "expo-web-browser": "~57.0.0",
+    "onesignal-expo-plugin": "^2.7.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.0",
@@ -35,9 +36,11 @@
     "react-native-bluetooth-classic": "^1.73.0-rc.17",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-maps": "1.27.2",
+    "react-native-onesignal": "^5.5.15",
     "react-native-reanimated": "4.5.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
+    "react-native-voximplant": "^1.45.0",
     "react-native-web": "~0.21.0",
     "react-native-webview": "13.16.1",
     "react-native-wifi-reborn": "^4.13.6",
@@ -47,11 +50,13 @@
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.2",
+    "@types/react-test-renderer": "^19.3.0",
     "babel-jest": "^29.7.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.0",
     "jest": "^29.7.0",
     "patch-package": "^8.0.1",
+    "react-test-renderer": "^19.2.3",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -62,7 +67,8 @@
     "ios": "node ./scripts/with-google-map-key.js run:ios",
     "web": "node ./scripts/with-google-map-key.js start --web",
     "lint": "expo lint",
-    "test:wifi": "jest --config jest.wifi.config.cjs --runInBand"
+    "test:wifi": "jest --config jest.wifi.config.cjs --runInBand",
+    "test:assistance": "jest --config jest.assistance.config.cjs --runInBand"
   },
   "private": true,
   "expo": {

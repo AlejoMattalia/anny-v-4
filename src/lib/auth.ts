@@ -7,6 +7,11 @@ import {
 
 const authSessionKey = 'anny-auth-session.json';
 const requestTimeoutMs = 10000;
+const sessionListeners = new Set<() => void>();
+export function subscribeAuthSession(listener: () => void) {
+  sessionListeners.add(listener);
+  return () => { sessionListeners.delete(listener); };
+}
 
 export type AuthUser = {
   _id?: string;
@@ -142,6 +147,7 @@ export async function loginWithEmail(email: string, password: string) {
 
 export async function saveAuthSession(session: AuthSession) {
   await writePersistentValue(authSessionKey, JSON.stringify(session));
+  sessionListeners.forEach(listener => listener());
 }
 
 export async function getAuthSession() {
@@ -162,6 +168,7 @@ export async function getAuthSession() {
 export async function clearAuthSession() {
   try {
     await deletePersistentValue(authSessionKey);
+    sessionListeners.forEach(listener => listener());
   } catch {
     // Nothing to clear.
   }

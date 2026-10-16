@@ -8,7 +8,7 @@ beforeEach(() => {
   jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
   jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 it('requests a fresh scan and keeps signal and frequency for network selection', async () => {
   (WifiManager.reScanAndLoadWifiList as jest.Mock).mockResolvedValue(JSON.stringify([{SSID: 'Home', level: -43, frequency: 2412}, {SSID: ''}]));
   expect(await scanLensNetworks()).toEqual([{ssid: 'Home', signal: -43, frequency: 2412}]);
@@ -23,4 +23,20 @@ it('reports permission denial without trying to scan', async () => {
   (PermissionsAndroid.check as jest.Mock).mockResolvedValue(false);
   await expect(scanLensNetworks()).rejects.toThrow('Permití ubicación');
   expect(WifiManager.reScanAndLoadWifiList).not.toHaveBeenCalled();
+});
+
+it('recovers when Android never completes the fresh scan', async () => {
+  jest.useFakeTimers();
+  (WifiManager.reScanAndLoadWifiList as jest.Mock).mockReturnValue(new Promise(() => {}));
+  (WifiManager.loadWifiList as jest.Mock).mockResolvedValue([{SSID: 'Home', level: -72, frequency: 2412}]);
+  const pending = scanLensNetworks();
+  await jest.advanceTimersByTimeAsync(8000);
+  await expect(pending).resolves.toEqual([{ssid: 'Home', signal: -72, frequency: 2412}]);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+it('uses cached results when the native module resolves its throttling message', async () => {
+  (WifiManager.reScanAndLoadWifiList as jest.Mock).mockResolvedValue("Starting Android 9, it's only allowed to scan 4 times per 2 minuts in a foreground app.");
+  (WifiManager.loadWifiList as jest.Mock).mockResolvedValue(JSON.stringify([{SSID: 'Home', level: -72, frequency: 2412}]));
+  await expect(scanLensNetworks()).resolves.toEqual([{ssid: 'Home', signal: -72, frequency: 2412}]);
 });

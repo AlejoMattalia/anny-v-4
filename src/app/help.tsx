@@ -29,6 +29,10 @@ export default function HelpScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Asistencia remota con un familiar o tutor" onPress={() => router.push('/remote-assistance')} style={styles.card}>
+            <View style={styles.iconWrap}><MaterialCommunityIcons color="#FFFFFF" name="video-account" size={30} /></View>
+            <View style={styles.cardBody}><Text style={styles.cardTitle}>Asistencia remota</Text><Text style={styles.cardDescription}>Ayuda de un familiar o tutor por videollamada</Text></View>
+          </Pressable>
           {scanActions.map((action) => (
             <Pressable
               key={action.mode}

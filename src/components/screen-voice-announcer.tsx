@@ -8,7 +8,11 @@ const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
   '/home':
     'Inicio de Anny. Podés elegir Viajar, Explorar, Ayuda o Configuración. También podés abrir el menú para acceder a tu perfil, tutorial y términos de uso.',
   '/help':
-    'Sección Ayuda. Podés escanear texto, imágenes y billetes, o abrir el streaming en tiempo real del lente o del celular.',
+    'Sección Ayuda. Podés pedir asistencia remota a un tutor, escanear texto, imágenes y billetes, o abrir el streaming en tiempo real del lente o del celular.',
+  '/remote-assistance':
+    'Asistencia remota. Las cuentas PDV pueden pedir ayuda a sus tutores. Las cuentas tutor pueden aceptar solicitudes y comenzar una videollamada.',
+  '/tutors':
+    'Tutores y personas vinculadas. Podés vincular una cuenta por correo o código, editar su nombre o desvincularla.',
   '/anny-board':
     'Sección Lente Anny. Podés abrir el streaming en tiempo real de los lentes vinculados a tu cuenta.',
   '/remote-cameras':

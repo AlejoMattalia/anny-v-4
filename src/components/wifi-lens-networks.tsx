@@ -88,6 +88,7 @@ export function WifiLensNetworks() {
       <Pressable accessibilityRole="button" onPress={() => openForm(null)} style={styles.secondaryButton}><Ionicons name="add" size={17} color="#6A0DAD" /><Text style={styles.secondaryText}>Agregar red</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Reintentar conexión" disabled={busy} onPress={() => void manager.refresh(true, true)} style={styles.retry}>{busy ? <ActivityIndicator size="small" color="#6A0DAD" /> : <Ionicons name="refresh" size={20} color="#6A0DAD" />}</Pressable>
       </View>
+      {connection.message && connection.phase === 'disconnected' ? <Text accessibilityLiveRegion="polite" style={styles.error}>{connection.message}</Text> : null}
       {!formOpen && message ? <Text accessibilityLiveRegion="polite" style={styles.error}>{message}</Text> : null}
     </ScrollView>
     <Modal visible={formOpen} animationType="slide" onRequestClose={() => setFormOpen(false)}>

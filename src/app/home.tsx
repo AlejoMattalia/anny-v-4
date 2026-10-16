@@ -7,12 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { WifiLensConnectionCard } from '@/components/wifi-lens-connection-card';
 import { clearAuthSession } from '@/lib/auth';
+import { useAssistance } from '@/context/assistance-context';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const drawerItems = [
   { icon: 'home-outline', label: 'Home' },
   { icon: 'account-outline', label: 'Perfil', route: '/profile' },
+  { icon: 'account-group-outline', label: 'Tutores y personas vinculadas', route: '/tutors' },
+  { icon: 'video-account', label: 'Asistencia remota', route: '/remote-assistance' },
   { icon: 'access-point', label: 'Dispositivos', route: '/bluetooth-devices' },
   { icon: 'cog-outline', label: 'Configuraciones', route: '/settings' },
   { icon: 'book-open-page-variant-outline', label: 'Tutorial', route: '/onboarding' },
@@ -71,6 +74,7 @@ function SectionIcon({ name }: { name: string }) {
 }
 
 export default function HomeScreen() {
+  const assistance = useAssistance();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerProgress] = useState(() => new Animated.Value(0));
   const drawerTranslateX = drawerProgress.interpolate({
@@ -181,7 +185,11 @@ export default function HomeScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}>
           {/* Panel de placa ESP32 con Activación deshabilitado; conexión de lentes WiFi como v3. */}
-          <WifiLensConnectionCard />
+          {assistance.role !== 'TUTOR' && <WifiLensConnectionCard />}
+          <Pressable accessibilityRole="button" style={{ padding: 20, borderRadius: 18, backgroundColor: '#E9E4EA', marginBottom: 16 }} onPress={() => router.push('/remote-assistance')}>
+            <Text style={{ fontSize: 21, fontWeight: '700', color: '#3C1642' }}>{assistance.role === 'TUTOR' ? 'Cuenta tutor · Asistencia remota' : 'Ayuda de familiar o tutor'}</Text>
+            <Text style={{ marginTop: 8, fontSize: 17, color: '#444' }}>{assistance.incoming ? `${assistance.incoming.name || 'Una persona vinculada'} necesita ayuda` : assistance.role === 'TUTOR' ? 'Ver solicitudes y personas vinculadas' : 'Pedir ayuda por videollamada'}</Text>
+          </Pressable>
 
           <View style={styles.sections}>
             {homeSections.map((section) => (

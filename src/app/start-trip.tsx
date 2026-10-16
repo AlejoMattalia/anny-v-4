@@ -2877,7 +2877,7 @@ export default function StartTripScreen() {
                   <Text style={styles.sosActionText}>Compartir ubicación</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => speak('Contactando al centro de asistencia remota.')}
+                  onPress={() => { setShowSOS(false); router.push('/remote-assistance'); }}
                   style={styles.sosActionButton}
                 >
                   <Ionicons color="#6A0DAD" name="headset" size={20} />
