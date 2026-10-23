@@ -19,7 +19,7 @@ declare module 'react-native-voximplant' {
   export interface VoxEvent { call: Call; endpoint: Endpoint; videoStream: { id: string }; code: number; text: string; }
   export const Voximplant: {
     getInstance(): {
-      connect(): Promise<void>;
+      connect(options: { node: string }): Promise<void>;
       disconnect(): Promise<void>;
       getClientState(): Promise<string>;
       login(user: string, password: string): Promise<void>;
@@ -29,6 +29,7 @@ declare module 'react-native-voximplant' {
     };
     ClientEvents: Record<string, string>;
     ClientState: Record<string, string>;
+    ConnectionNode: Record<string, string>;
     CallEvents: Record<string, string>;
     EndpointEvents: Record<string, string>;
     Hardware: {

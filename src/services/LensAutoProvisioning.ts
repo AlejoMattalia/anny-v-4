@@ -65,51 +65,57 @@ export async function discoverAndConfigureLens(
       'Activá Bluetooth para que Anny encuentre los lentes. El video se transmite por Wi-Fi.',
     );
   }
-  onProgress('Buscando tus lentes cercanos…');
-  const device = await new Promise<Device>((resolve, reject) => {
-    let done = false;
-    const finish = (found?: Device, error?: Error) => {
-      if (done) {
-        return;
-      }
-      done = true;
-      clearTimeout(timer);
-      ble.stopDeviceScan();
-      signal.removeEventListener('abort', cancel);
-      if (found) {
-        resolve(found);
-      } else {
-        reject(
-          error || new Error('Encendé los lentes y acercalos al celular.'),
-        );
-      }
-    };
-    const cancel = () => finish(undefined, new Error('Conexión cancelada.'));
-    const timer = setTimeout(() => finish(), 20000);
-    signal.addEventListener('abort', cancel);
-    ble.startDeviceScan([SERVICE], null, (error, found) => {
-      if (error) {
-        finish(
-          undefined,
-          new Error(
-            'No se pudo buscar el lente. Revisá Bluetooth y los permisos.',
-          ),
-        );
-      }
-      if (found && (!knownId || found.id === knownId)) {
-        finish(found);
-      }
+  let device: Device | null = null;
+  onProgress('Buscando tus lentes…');
+  for (let attempt = 1; attempt <= 3 && !device; attempt++) {
+    check();
+    device = await new Promise<Device | null>((resolve, reject) => {
+      let done = false;
+      const finish = (found?: Device, error?: Error) => {
+        if (done) {
+          return;
+        }
+        done = true;
+        clearTimeout(timer);
+        ble.stopDeviceScan();
+        signal.removeEventListener('abort', cancel);
+        if (error) {reject(error);}
+        else {resolve(found ?? null);}
+      };
+      const cancel = () => finish(undefined, new Error('Conexión cancelada.'));
+      const timer = setTimeout(() => finish(), 20000);
+      signal.addEventListener('abort', cancel);
+      if (signal.aborted) {cancel(); return;}
+      ble.startDeviceScan([SERVICE], null, (error, found) => {
+        if (error) {
+          finish(
+            undefined,
+            new Error(
+              'No se pudo buscar el lente. Revisá Bluetooth y los permisos.',
+            ),
+          );
+          return;
+        }
+        if (found && (!knownId || found.id === knownId)) {
+          finish(found);
+        }
+      });
     });
-  });
+  }
+  check();
+  if (!device) {
+    throw new Error('No se encontraron los lentes. Encendelos, acercalos al celular y tocá Reintentar.');
+  }
+  const discoveredDevice = device;
   let connected: Device | null = null;
   const cancel = () => {
-    void ble.cancelDeviceConnection(device.id).catch(() => {});
+    void ble.cancelDeviceConnection(discoveredDevice.id).catch(() => {});
   };
   signal.addEventListener('abort', cancel);
   try {
     check();
     onProgress('Conectando con tus lentes…');
-    connected = await device.connect({timeout: 15000});
+    connected = await discoveredDevice.connect({timeout: 15000});
     await connected.discoverAllServicesAndCharacteristics();
     if (Platform.OS === 'android') {
       connected = await connected.requestMTU(247);
@@ -176,7 +182,7 @@ export async function discoverAndConfigureLens(
       }
       if (state.result === 'saved' && state.connected && state.ssid === ssid) {
         return {
-          id: device.id,
+          id: discoveredDevice.id,
           ap: state.ap as string,
           password: credential,
           address: state.ip as string,

@@ -1,4 +1,4 @@
-import { SavedNetwork, NetworkType } from '../types/savedNetwork';
+import { SavedNetwork, NetworkType, HotspotSource } from '../types/savedNetwork';
 import { deletePersistentValue, readPersistentValue, writePersistentValue } from '../lib/persistent-storage';
 
 const AsyncStorage = {
@@ -34,7 +34,7 @@ const SavedNetworksService = {
     return all.filter(n => n.type === type);
   },
 
-  async add(ssid: string, password: string, type: NetworkType): Promise<SavedNetwork> {
+  async add(ssid: string, password: string, type: NetworkType, hotspotSource?: HotspotSource): Promise<SavedNetwork> {
     const all = await this.getAll();
 
     // Check if already exists (same ssid + type)
@@ -42,6 +42,7 @@ const SavedNetworksService = {
     if (existingIndex !== -1) {
       // Update password
       all[existingIndex].password = password;
+      if (type === 'hotspot' && hotspotSource) all[existingIndex].hotspotSource = hotspotSource;
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(all));
       notify();
       return all[existingIndex];
@@ -53,6 +54,7 @@ const SavedNetworksService = {
       password,
       type,
       createdAt: Date.now(),
+      ...(type === 'hotspot' && hotspotSource ? {hotspotSource} : {}),
     };
 
     all.push(network);
@@ -66,7 +68,7 @@ const SavedNetworksService = {
     return network;
   },
 
-  async update(id: string, newSSID: string, newPassword: string): Promise<SavedNetwork | null> {
+  async update(id: string, newSSID: string, newPassword: string, hotspotSource?: HotspotSource): Promise<SavedNetwork | null> {
     const all = await this.getAll();
     const index = all.findIndex(n => n.id === id);
     if (index === -1) {
@@ -77,6 +79,7 @@ const SavedNetworksService = {
     }
     all[index].ssid = newSSID;
     all[index].password = newPassword;
+    if (all[index].type === 'hotspot' && hotspotSource) all[index].hotspotSource = hotspotSource;
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(all));
     notify();
     return all[index];
@@ -135,6 +138,14 @@ const SavedNetworksService = {
    */
   async setPreference(type: NetworkType): Promise<void> {
     await AsyncStorage.setItem('network_preference', type);
+  },
+
+  async getDisconnected(): Promise<boolean> {
+    return await AsyncStorage.getItem('manually_disconnected') === 'true';
+  },
+
+  async setDisconnected(disconnected: boolean): Promise<void> {
+    await AsyncStorage.setItem('manually_disconnected', String(disconnected));
   },
 
   /**

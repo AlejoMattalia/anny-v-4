@@ -1,0 +1,65 @@
+ANNY — FICHA DE GOOGLE PLAY EN ESPAÑOL
+
+Destino: ficha de Play Store predeterminada.
+Textos redactados en español de Argentina. Elegí Español (Latinoamérica) si es el idioma configurado en tu ficha; el nombre es el mismo.
+
+CAMPOS DE TEXTO
+
+Nombre de la aplicación (29/30):
+Anny Potencia tus capacidades
+
+Descripción breve (73/80):
+Asistencia visual con IA para leer textos, reconocer billetes y explorar.
+
+Descripción completa:
+Copiá el contenido de es-AR/textos/descripcion-completa.txt.
+Tiene 2361 caracteres de un máximo de 4000, sin el salto de línea final.
+
+IMÁGENES QUE TENÉS QUE SUBIR
+
+Icono de la aplicación:
+es-AR/icono-512.png — 512 × 512 px. Exportado del icono original del proyecto.
+
+Gráfico de funciones:
+es-AR/grafico-destacado-1024x500.png — 1024 × 500 px.
+
+Capturas de teléfono:
+Subí las 6 imágenes de es-AR/telefono siguiendo el orden numérico (1080 × 1920 px).
+
+Capturas de tablet de 7 pulgadas:
+Usá las 4 imágenes de es-AR/tablet-7 si distribuís la app para tablets (1080 × 1920 px).
+
+Capturas de tablet de 10 pulgadas:
+Usá las 4 imágenes de es-AR/tablet-10 si distribuís la app para tablets (1440 × 2560 px).
+
+Texto alternativo:
+Usá es-AR/textos/textos-alternativos.csv para describir cada captura donde Play Console lo permita.
+
+VÍDEOS Y OTROS DISPOSITIVOS
+
+Vídeo: dejalo vacío por ahora. Este paquete no incluye un vídeo publicado en YouTube. No pegues la URL incompleta del ejemplo ni un enlace al canal.
+
+Ordenadores: dejá este apartado vacío salvo que vayas a distribuir y mostrar una experiencia verificada en ese formato. No reutilices las capturas de teléfono como si fueran de ordenador.
+
+Android XR: dejá vacías las capturas y las dos URLs de vídeo. No se encontró una experiencia XR implementada en este proyecto. Los lentes WiFi Anny son un accesorio de cámara; eso no convierte la app en una aplicación de Android XR.
+
+ORIGEN Y ALCANCE
+
+Los textos describen funciones presentes en anny-v4. No promocionan el botón deshabilitado «Hablar con Anny», funciones ESP32 deshabilitadas ni resultados garantizados de IA.
+
+El gráfico destacado se creó con la herramienta integrada image_gen. El prompt exacto está en fuentes/prompt-grafico.txt.
+
+Las capturas deben corresponder a la versión que publiques. Consultá fuentes/capturas.json para ver la compilación, rutas y configuraciones usadas. Se conservó la interfaz de la app, sin inventar resultados de IA ni conversaciones. Las capturas no prueban el funcionamiento de los servicios externos, llamadas ni lentes físicos.
+
+Las capturas se obtuvieron de una compilación release x86_64 del código local de anny-v4 (versión 1.0.3, código 4). El APK existente anny-v4-1.3.apk era ARM; se compiló para el emulador sin editar el código de la app. Los perfiles de tablet usan anchos lógicos de 600 dp y 800 dp, respectivamente; se volvió a renderizar la app en cada tamaño, sin estirar capturas de teléfono.
+
+Los archivos de esta carpeta se prepararon localmente; no se cargó ni publicó la ficha en Play Console.
+
+REFERENCIA OFICIAL
+
+Google Play exige un icono de 512 × 512 y un gráfico de 1024 × 500. Para optar a promociones con capturas de apps, recomienda al menos cuatro verticales de 1080 × 1920 o superiores. El vídeo de vista previa es opcional. La interfaz de las capturas debe representar la experiencia real.
+
+Ayuda de Play Console, consultada el 19 de octubre de 2026:
+https://support.google.com/googleplay/android-developer/answer/9866151?hl=es
+
+Si Play Console muestra un requisito diferente para un formato adicional, usá el que aparezca en tu ficha. No es necesario completar todos los tipos de dispositivo solo porque aparezcan en el formulario.

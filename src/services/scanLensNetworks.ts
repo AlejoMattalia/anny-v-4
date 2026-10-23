@@ -2,6 +2,13 @@ import {PermissionsAndroid, Platform} from 'react-native';
 import WifiManager from 'react-native-wifi-reborn';
 import type {NearbyLensNetwork} from './WifiLensConnectionManager';
 
+/** Client Wi-Fi may be off while this phone is hosting a working hotspot. */
+export async function isPhoneWifiEnabled(): Promise<boolean> {
+  if (Platform.OS !== 'android') {return true;}
+  try {return await WifiManager.isEnabled();}
+  catch {return false;}
+}
+
 function parseNetworks(raw: unknown): {SSID: string; level?: number; frequency?: number}[] {
   const entries = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (!Array.isArray(entries)) {throw new Error('No se pudo actualizar la búsqueda WiFi.');}
@@ -9,6 +16,8 @@ function parseNetworks(raw: unknown): {SSID: string; level?: number; frequency?:
 }
 
 export async function scanLensNetworks(): Promise<NearbyLensNetwork[]> {
+  // Cached SSIDs are not evidence that the phone can join a network now.
+  if (!await isPhoneWifiEnabled()) {return [];}
   if (Platform.OS === 'android') {
     const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
     const allowed =

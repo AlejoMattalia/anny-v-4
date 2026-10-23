@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { useWifiLensConnection } from './useWifiLensConnection';
 import { useAssistance } from './assistance-context';
 import SavedNetworksService from '../services/SavedNetworksService';
@@ -15,6 +16,7 @@ type LensContext = {
   networkPreference: NetworkType;
   setNetworkPreference: (type: NetworkType) => Promise<void>;
   connect: (network: SavedNetwork) => Promise<boolean>;
+  disconnect: () => Promise<void>;
   trackWifiLensCamera: (pair: LensPairing, status: LensStatus) => Promise<() => void>;
 };
 export const WifiLensContext = createContext<LensContext>(null!);
@@ -35,15 +37,21 @@ export function WifiLensProvider({ children }: PropsWithChildren) {
       if (active) setNetworks(saved);
     }
     void (async () => {
-      try { await migrateWifiLens(); }
-      catch { console.warn('[WifiLens] Vinculación anterior pendiente de migrar.'); }
+      // Restore before enabling startup polling or opening any camera.
+      const disconnected = await SavedNetworksService.getDisconnected().catch(() => true);
+      if (!active) return;
+      manager.restoreDisconnected(disconnected);
+      if (!disconnected) {
+        try { await migrateWifiLens(); }
+        catch { console.warn('[WifiLens] Vinculación anterior pendiente de migrar.'); }
+      }
       const mode = await SavedNetworksService.getPreference();
       await reload();
       if (active) { setPreference(mode); setInitialized(true); }
     })();
     const unsubscribe = SavedNetworksService.subscribe(() => void reload());
     return () => { active = false; unsubscribe(); };
-  }, []);
+  }, [manager]);
   const setNetworkPreference = useCallback(async (type: NetworkType) => {
     await SavedNetworksService.setPreference(type);
     setPreference(type);
@@ -55,13 +63,20 @@ export function WifiLensProvider({ children }: PropsWithChildren) {
     return manager.connect(network);
   }, [manager]);
   const trackWifiLensCamera = useCallback((pair: LensPairing, status: LensStatus) => manager.trackCamera(pair, status), [manager]);
-  return <WifiLensContext.Provider value={{ wifiLensConnection: connection, manager, networks, networkPreference: preference, setNetworkPreference, connect, trackWifiLensCamera }}>
+  const disconnect = useCallback(() => manager.disconnect(), [manager]);
+  const connectionFailed = connection.phase === 'disconnected';
+  const closeDialog = () => connectionFailed ? manager.dismissDialog() : void manager.refreshStatus();
+  return <WifiLensContext.Provider value={{ wifiLensConnection: connection, manager, networks, networkPreference: preference, setNetworkPreference, connect, disconnect, trackWifiLensCamera }}>
     {children}
-    <Modal visible={connection.showDialog && ['searching', 'connecting'].includes(connection.phase)} transparent animationType="fade" onRequestClose={() => void manager.refreshStatus()}>
+    <Modal visible={connection.showDialog && ['searching', 'connecting', 'disconnected'].includes(connection.phase)} transparent animationType="fade" onRequestClose={closeDialog}>
       <View style={styles.overlay}><View style={styles.dialog}>
-        <ActivityIndicator color="#6A0DAD" size="large" />
+        {!connectionFailed ? <ActivityIndicator color="#6A0DAD" size="large" /> : null}
         <Text accessibilityLiveRegion="polite" style={styles.message}>{connection.message}</Text>
-        <Pressable accessibilityRole="button" onPress={() => void manager.refreshStatus()}><Text style={styles.cancel}>Cancelar</Text></Pressable>
+        {connectionFailed ? <>
+          <Pressable accessibilityRole="button" onPress={() => void manager.refresh(true, true)}><Text style={styles.cancel}>Reintentar</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => { manager.dismissDialog(); router.push('/bluetooth-devices'); }}><Text style={styles.cancel}>Revisar redes</Text></Pressable>
+        </> : null}
+        <Pressable accessibilityRole="button" onPress={closeDialog}><Text style={styles.cancel}>{connectionFailed ? 'Cerrar' : 'Cancelar'}</Text></Pressable>
       </View></View>
     </Modal>
   </WifiLensContext.Provider>;

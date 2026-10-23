@@ -1,0 +1,141 @@
+{
+  "paquete": "com.anonymous.annyv4",
+  "capturas": [
+    {
+      "archivo": "es-AR/telefono/01-ayuda.png",
+      "ruta": "help",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 420,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/telefono/02-escaner-y-streaming.png",
+      "ruta": "help",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 420,
+      "desplazamiento": true,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/telefono/03-viajar.png",
+      "ruta": "travel",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 420,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/telefono/04-explorar.png",
+      "ruta": "explore",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 420,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/telefono/05-configuracion.png",
+      "ruta": "settings",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 420,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/telefono/06-inicio.png",
+      "ruta": "home",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 420,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-7/01-ayuda.png",
+      "ruta": "help",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-7/02-viajar.png",
+      "ruta": "travel",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-7/03-explorar.png",
+      "ruta": "explore",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-7/04-configuracion.png",
+      "ruta": "settings",
+      "ancho": 1080,
+      "alto": 1920,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-10/01-ayuda.png",
+      "ruta": "help",
+      "ancho": 1440,
+      "alto": 2560,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-10/02-viajar.png",
+      "ruta": "travel",
+      "ancho": 1440,
+      "alto": 2560,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-10/03-explorar.png",
+      "ruta": "explore",
+      "ancho": 1440,
+      "alto": 2560,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    },
+    {
+      "archivo": "es-AR/tablet-10/04-configuracion.png",
+      "ruta": "settings",
+      "ancho": 1440,
+      "alto": 2560,
+      "densidad_android": 288,
+      "desplazamiento": false,
+      "origen": "adb exec-out screencap -p"
+    }
+  ],
+  "notas": "Render Android nativo en perfiles de teléfono y tablet. Conversión PNG RGB sin recorte, escalado ni cambios en el contenido.",
+  "fecha": "2026-10-19",
+  "version": "1.0.3",
+  "versionCode": 4,
+  "arquitectura": "x86_64",
+  "tipo_compilacion": "release",
+  "codigo": "anny-v4, árbol de trabajo local existente",
+  "git_head": "845a2252749e3c332c2671b90791cf99b31a950f",
+  "apk_sha256": "6c2c43ab970297c77432cb08f1593161ab6cf1803e81f212f72824fab7036b5e",
+  "comando_compilacion": "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 NODE_ENV=production ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64 --console=plain"
+}

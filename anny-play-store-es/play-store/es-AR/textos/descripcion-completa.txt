@@ -1,0 +1,25 @@
+Anny es una app de asistencia para personas ciegas o con baja visión. Reúne herramientas para escuchar textos, obtener descripciones del entorno, organizar recorridos y pedir ayuda a un familiar o tutor vinculado.
+
+INFORMACIÓN VISUAL EN VOZ ALTA
+Usá la cámara de tu celular o la de tus lentes Anny compatibles para acceder a estas funciones:
+• Escanear texto: escuchá el texto que aparece en una imagen.
+• Escanear imagen: obtené descripciones de objetos y escenas mediante inteligencia artificial.
+• Escanear billete: identificá billetes argentinos.
+• Streaming en tiempo real: recibí descripciones por voz a medida que se analiza lo que capta la cámara. Elegí entre los modos Viaje, Facultad, Supermercado, Deporte y Seguro según el contexto.
+
+HERRAMIENTAS PARA TUS RECORRIDOS
+Consultá dónde estás, explorá el mapa y buscá comercios o servicios cercanos. Planificá y simulá viajes, guardá recorridos y conservá tus ubicaciones habituales para volver a consultarlas.
+
+AYUDA DE PERSONAS DE CONFIANZA
+Vinculá tu cuenta con un familiar o tutor y solicitá asistencia por videollamada. Al pedir ayuda, compartís tu ubicación para facilitar el acompañamiento. La cuenta de tutor permite recibir solicitudes y acceder a las personas vinculadas.
+
+CAPACITACIONES Y CONTACTOS
+Accedé a módulos y actividades de orientación y movilidad con opciones de lectura en voz alta. Consultá tu agenda de contactos y accedé a las opciones para llamar desde el teléfono.
+
+AJUSTES A TU MEDIDA
+Configurá la velocidad de la voz y el intervalo de escaneo. Si tenés lentes Anny compatibles, administrá su conexión WiFi o Hotspot y las redes guardadas desde la app. También podés usar las funciones de escaneo con la cámara del celular sin conectar lentes.
+
+PARA USAR ANNY
+Las funciones de inteligencia artificial y asistencia remota requieren conexión a internet. La asistencia remota necesita cuentas vinculadas y que la otra persona esté disponible. Los permisos de cámara, micrófono, ubicación, contactos, notificaciones y Bluetooth se utilizan según las funciones que actives. Las funciones con lentes requieren un dispositivo Anny compatible.
+
+Las descripciones de IA y la información de ubicación son orientativas y pueden contener errores. Anny es una herramienta de apoyo: no garantiza la detección de obstáculos ni reemplaza las ayudas de movilidad o los servicios de emergencia.

@@ -15,10 +15,14 @@ jest.mock('react-native-voximplant', () => {
     };
   };
   const call = { ...emitter(), getEndpoints: () => [], answer: jest.fn(), hangup: jest.fn(), decline: jest.fn(), sendAudio: jest.fn(), sendMessage: jest.fn() };
-  const client = { ...emitter(), connect: jest.fn().mockResolvedValue({}), login: jest.fn().mockResolvedValue({}), disconnect: jest.fn().mockResolvedValue({}), getClientState: jest.fn().mockResolvedValue('LOGGED_IN'), call: jest.fn().mockResolvedValue(call) };
+  const client = { ...emitter(), connect: jest.fn((options?: { node?: string }) => options?.node
+    ? Promise.resolve({})
+    : Promise.reject({ name: 'ConnectionFailed', message: 'ConnectOptions and ConnectionNode are required' })),
+  login: jest.fn().mockResolvedValue({}), disconnect: jest.fn().mockResolvedValue({}), getClientState: jest.fn().mockResolvedValue('LOGGED_IN'), call: jest.fn().mockResolvedValue(call) };
   return { Voximplant: {
     getInstance: () => client, mockCall: call, VideoView: () => null, RenderScaleType: { SCALE_FIT: 'fit' },
     ClientState: { DISCONNECTED: 'DISCONNECTED' },
+    ConnectionNode: { NODE_1: 'node1' },
     ClientEvents: { IncomingCall: 'incoming', ConnectionFailed: 'connection-failed', ConnectionClosed: 'closed' },
     CallEvents: { Connected: 'connected', Disconnected: 'disconnected', Failed: 'failed', ICETimeout: 'timeout', EndpointAdded: 'endpoint', LocalVideoStreamAdded: 'local-video', MessageReceived: 'message' },
     EndpointEvents: { RemoteVideoStreamAdded: 'remote-video', RemoteVideoStreamRemoved: 'remove-video' },
@@ -38,6 +42,13 @@ beforeEach(() => {
   process.env.EXPO_PUBLIC_VOXIMPLANT_TUTOR_PASSWORD = 'test';
 });
 afterEach(async () => { await act(async () => tree.unmount()); jest.useRealTimers(); });
+it.each(['PDV', 'TUTOR'] as const)('connects %s to the existing account node before authenticating', async role => {
+  await act(async () => { tree = create(React.createElement(AssistanceMedia, { role, ...callbacks })); });
+  expect(callbacks.onError).not.toHaveBeenCalled();
+  expect(client.connect).toHaveBeenCalledWith({ node: 'node1' });
+  expect(client.login).toHaveBeenCalledWith(role === 'PDV' ? 'pdv@example' : 'tutor@example', 'test');
+  expect((client.connect as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan((client.login as jest.Mock).mock.invocationCallOrder[0]);
+});
 it('answers on PDV with SDK methods that return void, handles source changes and releases the call', async () => {
   await act(async () => { tree = create(React.createElement(AssistanceMedia, { role: 'PDV', ...callbacks })); });
   await act(async () => { client.emit('incoming', { call: sdk.mockCall }); sdk.mockCall.emit('connected'); sdk.mockCall.emit('message', { text: 'SHOW_GLASSES' }); });

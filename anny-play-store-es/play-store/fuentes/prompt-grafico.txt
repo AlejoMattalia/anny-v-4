@@ -1,0 +1,10 @@
+Use case: ads-marketing
+Asset type: Google Play feature graphic for the Android app Anny, Spanish.
+Primary request: Create a polished, minimal wide horizontal promotional banner for an accessibility assistant for blind and low vision users. Wide aspect ratio 1024:500 (approximately 2.048:1), landscape.
+Style: confident premium editorial graphic design, extremely legible large typography, restrained luminous plum / lavender / warm white palette matching the app (#3C1642, #6A0DAD, #E9E4EA). Rich plum-to-purple background with elegant flowing audio wave line art and a subtle translucent simplified eye shape on the right representing visual information translated into voice, no literal hardware.
+Text verbatim: small brand name "Anny"; main large headline split across two lines "Tu entorno," and "en palabras."
+Composition: left aligned words around 12% from the left, headline uses the middle vertical region, simple expressive audio-wave visual in right half. All important content within central 80% safe area. Crisp readable white type, ample negative space. Keep primary text away from center-right video play overlay.
+Avoid: smartphone mockups, fake application UI, screenshots, people, glasses hardware, store badges, ratings, rankings, awards, download call to action, tiny text, extra words, invented logo, black background.
+Opaque background. Final will be exported to exactly 1024x500.
+
+Modo: herramienta integrada image_gen (habilidad imagegen).

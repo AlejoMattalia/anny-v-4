@@ -1,0 +1,140 @@
+{
+  "resultado": "OK",
+  "imagenes": [
+    {
+      "archivo": "es-AR/grafico-destacado-1024x500.png",
+      "ancho": 1024,
+      "alto": 500,
+      "modo": "RGB",
+      "bytes": 458280,
+      "sha256": "5230a7a22c122fc6cafa20e65dee542571cd7943f373c372c20b7408ed430ee0"
+    },
+    {
+      "archivo": "es-AR/icono-512.png",
+      "ancho": 512,
+      "alto": 512,
+      "modo": "RGBA",
+      "bytes": 38257,
+      "sha256": "edbbcef3a7ff08db5f50a7ff18dccbbea64287daf70e4c59c5c1b9b339cb2c1f"
+    },
+    {
+      "archivo": "es-AR/tablet-10/01-ayuda.png",
+      "ancho": 1440,
+      "alto": 2560,
+      "modo": "RGB",
+      "bytes": 112381,
+      "sha256": "601eb291baf225fb098c04e675c638dfdfc17d841dfc369cb7a89032e37a1481"
+    },
+    {
+      "archivo": "es-AR/tablet-10/02-viajar.png",
+      "ancho": 1440,
+      "alto": 2560,
+      "modo": "RGB",
+      "bytes": 66107,
+      "sha256": "b608c33f026782886988457e5e9d42b7c99fa2ded19f00c62e687fbba035981c"
+    },
+    {
+      "archivo": "es-AR/tablet-10/03-explorar.png",
+      "ancho": 1440,
+      "alto": 2560,
+      "modo": "RGB",
+      "bytes": 65921,
+      "sha256": "bbb9d2c82b21abe835cbb5cafbf7cab65ef86f376ceb2ebcd9f2e640ad21f080"
+    },
+    {
+      "archivo": "es-AR/tablet-10/04-configuracion.png",
+      "ancho": 1440,
+      "alto": 2560,
+      "modo": "RGB",
+      "bytes": 121987,
+      "sha256": "1fc54de5097d94b1f73b254ea4ce75b37b201a957242b617f2265dcef6dbc1e2"
+    },
+    {
+      "archivo": "es-AR/tablet-7/01-ayuda.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 102945,
+      "sha256": "58342d74b55058f1187c114ec865c0ee2198878896da8edfd1b0e1d65be6ded4"
+    },
+    {
+      "archivo": "es-AR/tablet-7/02-viajar.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 56720,
+      "sha256": "f728182cb8e29234cdd9594eb32d96fabae4fde0d2edcf0833cb3260521f02c6"
+    },
+    {
+      "archivo": "es-AR/tablet-7/03-explorar.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 56843,
+      "sha256": "9783e9c0b7c3d70ec48a6387bcd71434f0d50c22b981c11d6c3d88408bed938b"
+    },
+    {
+      "archivo": "es-AR/tablet-7/04-configuracion.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 111862,
+      "sha256": "75281e3d12575025c208479fab718210fa4985d1eef38d208deb132f0f8152c6"
+    },
+    {
+      "archivo": "es-AR/telefono/01-ayuda.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 118570,
+      "sha256": "4572153b01495f933fa1b21aac2f036e0552dd16a84ab59758327fa134e81d07"
+    },
+    {
+      "archivo": "es-AR/telefono/02-escaner-y-streaming.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 125550,
+      "sha256": "01a785b8dd4a5b3eedf9ca3fd63dff098664cf4bfbae3c963402e5f0ccb3bd35"
+    },
+    {
+      "archivo": "es-AR/telefono/03-viajar.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 74657,
+      "sha256": "54ebf75b1cee164fd7f1e996fbcf573dac85bfc8695aa6201eadb41c616fa14f"
+    },
+    {
+      "archivo": "es-AR/telefono/04-explorar.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 74987,
+      "sha256": "9c4f0276eb8c46b8b5aa3fead800d6c41ed556631c6945958a9aa18fa4378dbb"
+    },
+    {
+      "archivo": "es-AR/telefono/05-configuracion.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 138189,
+      "sha256": "caedf434ec7a7cfe1e79ae61c41cbefca380acb046797ff717e029402c8462e6"
+    },
+    {
+      "archivo": "es-AR/telefono/06-inicio.png",
+      "ancho": 1080,
+      "alto": 1920,
+      "modo": "RGB",
+      "bytes": 122566,
+      "sha256": "8b62a0b2943785916810abb61be7adb61cc17fc33c64b4b972e99c4b0566373e"
+    }
+  ],
+  "caracteres_textos": {
+    "nombre": 29,
+    "descripcion-breve": 73,
+    "descripcion-completa": 2361
+  },
+  "capturas_nativas": 14,
+  "inspeccion_visual": "16 imágenes revisadas: icono, gráfico y dos hojas de contacto con todas las capturas."
+}

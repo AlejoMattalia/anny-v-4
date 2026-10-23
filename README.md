@@ -26,6 +26,11 @@ del celular. Finalizar o salir libera la llamada y la reserva de video. El
 envío de cuadros de lentes requiere Anny en primer plano; no se garantiza
 continuidad de la llamada con el teléfono bloqueado.
 
+La conexión inicial indica `ConnectionNode.NODE_1`, la misma ruta de la cuenta
+existente en v3. El SDK 1.42+ exige ese parámetro: omitirlo rechaza la conexión
+antes del login y terminaba mostrando el aviso genérico de revisar Internet.
+Las pruebas de ambos roles exigen el nodo y comprueban el login posterior.
+
 Las variables de `.env.example` incluyen los servidores de grupos/avisos,
 el App ID de OneSignal y las cuentas Voximplant de cada rol (usuario completo,
 incluido `@aplicacion.cuenta.voximplant.com`). En esta copia local se trasladó
@@ -55,15 +60,78 @@ los servicios; la entrega real de push y el audio/video requieren esa prueba.
 Inicio y Dispositivos usan el mismo gestor `WifiLensConnectionManager` de v3:
 selección WiFi/Hotspot, descubrimiento cercano BLE, redes guardadas (máximo ocho),
 sincronización con el lente, reconexión y confirmación de la conexión real.
-En Dispositivos se agregan, editan y eliminan redes. Guardar una red no
-interrumpe la cámara; Conectar/Cambiar y el switch solicitan el cambio de red.
+En Dispositivos se agregan, editan y eliminan redes. Al guardar o corregir una
+red, Anny intenta conectar automáticamente si los lentes están desconectados.
+Si ya están conectados, sincroniza la lista y conserva la conexión y la cámara.
+Al perder la conexión vuelve a buscar redes guardadas del modo seleccionado:
+prioriza la red del celular y después las redes de 2,4 GHz con mejor señal.
+Si Android no muestra ninguna red guardada (lista vacía, permiso denegado o
+escaneo fallido), prueba las redes guardadas por Bluetooth: el lente busca
+el WiFi y la app exige confirmar su SSID y acceso real antes de marcar conectado.
+La recuperación se comprueba cada 15 segundos con Anny en primer plano;
+los intentos de búsqueda y conexión pueden demorar más. Conectar y el switch
+permiten solicitar un cambio manual. Una red nueva requiere guardar su nombre
+y contraseña una vez, Bluetooth y los permisos de Android. El celular debe
+poder comunicarse con los lentes en esa red; las redes sólo de 5 GHz y las que
+exigen iniciar sesión en un portal no están cubiertas por este flujo.
 BLE configura el firmware `lente-wifi-2`; el video se transmite por WiFi.
+Cuando el lente está conectado, Inicio y Dispositivos muestran **Desconectar**.
+El botón cierra la comunicación de Anny: cancela consultas y conexiones en
+curso, retira la cámara nativa (cierre HTTP o STOP UDP), detiene el servicio de
+streaming y las consultas del botón del lente. La elección se guarda para
+evitar reconexiones al volver de ajustes, editar redes o reiniciar Anny.
+**Conectar** o **Reintentar conexión** vuelven a habilitarla. Las redes y la
+vinculación se conservan. Desconectar de Anny no apaga el hotspot del celular
+ni ordena al firmware abandonar la red Wi-Fi; el lente permanece disponible
+para una conexión explícita posterior.
+Para usar el hotspot del mismo celular, elegir **Hotspot** en Dispositivos,
+activar Compartir Internet en 2,4 GHz y guardar su nombre y contraseña.
+El WiFi cliente del celular puede estar apagado: el lente se configura por BLE
+y se comprueba por su IP local. Si el primer estado tarda o falla, Anny no
+intenta activar ese WiFi ni desconectar la red. Tampoco usa SSID/resultados
+guardados de un WiFi apagado para decidir que debe unirse al hotspot.
+El formulario Hotspot permite ingresar los datos sin iniciar un escaneo.
+Al agregar o editar un hotspot se elige **Este celular** u **Otro celular**.
+Las redes nuevas proponen Este celular; las anteriores conservan su detección
+automática hasta que se editen. Este celular impide escanear o unirse al propio
+hotspot incluso en teléfonos que mantienen el WiFi cliente encendido.
+El SSID confirmado y el origen se conservan en la vinculación: al recuperar
+esa conexión, incluso después de cerrar Anny, la app sólo reintenta ese hotspot
+mientras siga guardado con ese origen. Conectar otra red explícitamente,
+editar el origen o borrar esa red permite cambiar la elección.
+Para un hotspot de otro celular, conectar este celular a esa misma red;
+la búsqueda y conexión asistida siguen disponibles con WiFi cliente activo.
+Al volver desde ajustes se siguen reconociendo los cuadros de la cámara activa,
+para que una consulta de estado fallida no marque desconectado un video vivo.
+Si pasan 15 segundos sin imágenes con la cámara en primer plano, deja de
+marcarse lista y se reabre el video local, sin reconfigurar WiFi ni BLE.
+Si el lente ya no responde, se muestra el error y Reintentar; la recuperación
+de red permanece a cargo del gestor. El monitor de imágenes se suspende al
+pasar a segundo plano y se cancela al pausar o cerrar la cámara.
+Estas rutas tienen pruebas simuladas; falta validar el corte reportado con
+los lentes y el hotspot del mismo celular (WiFi cliente apagado).
+El firmware 2.4.17 complementa esta recuperación: antes de buscar alternativas
+reintenta el último hotspot hasta tres veces. Si se agotaron los intentos,
+conserva su búsqueda de otras redes guardadas; la app mantiene su propia
+selección Este celular y no adopta automáticamente un hotspot distinto.
+También limita MJPEG a 10 FPS en Hotspot, evitando un envío sin pausa cuando
+el transporte UDP no entrega video. UDP conserva su cadencia adaptativa y
+la reducción de ritmo basada en los informes de recepción.
+Si no aparecen los lentes por Bluetooth, Anny realiza hasta tres búsquedas
+consecutivas de 20 segundos. El modal permanece abierto con «Buscando tus
+lentes…», sin mostrar ni anunciar cada reintento. Al encontrarlos continúa
+inmediatamente con la conexión. Cancelar detiene la búsqueda y los
+intentos restantes. Bluetooth apagado, permisos denegados o errores del
+escáner se informan directamente para poder corregirlos.
 
 Si Android restaura una vinculación cifrada sin su clave de Keystore después
 de reinstalar, Anny vuelve a vincular por Bluetooth usando la red guardada.
 La vinculación anterior se reemplaza sólo al confirmar acceso a los lentes.
 Dispositivos muestra el motivo cuando falla una conexión, además del estado
 que se muestra en Inicio.
+Si falla un intento iniciado al abrir Anny o con Conectar/Reintentar, el modal
+conserva el motivo y ofrece Reintentar, Revisar redes y Cerrar. Los reintentos
+automáticos no abren modales de error.
 La búsqueda WiFi espera hasta ocho segundos; si Android no responde o limita
 los escaneos, consulta los resultados disponibles para continuar la conexión.
 

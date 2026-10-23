@@ -114,7 +114,8 @@ export default function AssistanceMedia({ ref, role, ...callbacks }: AssistanceM
           if (stopped || failed) return;
           if (connected) handlers.current.onEnded(); else fail('Se perdió la conexión con el servicio de llamadas.');
         });
-        await bounded(client.connect(), 15000);
+        // SDK 1.42+ requires a node; retain the existing account route used by v3.
+        await bounded(client.connect({ node: Voximplant.ConnectionNode.NODE_1 }), 15000);
         if (stopped || failed) return;
         await bounded(client.login(user, password), 15000);
         if (stopped || failed) return;

@@ -1,4 +1,5 @@
 export type NetworkType = 'wifi' | 'hotspot';
+export type HotspotSource = 'this-phone' | 'other-phone';
 
 export interface SavedNetwork {
   id: string;
@@ -6,4 +7,5 @@ export interface SavedNetwork {
   password: string;
   type: NetworkType;
   createdAt: number;
+  hotspotSource?: HotspotSource;
 }

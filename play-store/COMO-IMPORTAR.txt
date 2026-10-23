@@ -1,0 +1,21 @@
+IMPORTAR LOS TEXTOS DE ANNY EN GOOGLE PLAY
+
+Archivo: anny-google-play-importar.csv
+Idioma: Español (América Latina), es-419.
+Contenido: nombre de la aplicación, descripción breve y descripción completa.
+
+1. Abrí la ficha de Play Store de Anny.
+2. Seleccioná «Importar traducciones con IA».
+3. Cargá anny-google-play-importar.csv.
+4. Revisá que se haya detectado Español (América Latina) y que las tres columnas correspondan a nombre, descripción breve y descripción completa.
+5. Aplicá los textos y guardá la ficha según las opciones que muestre Play Console.
+
+Las imágenes se suben por separado en los campos de icono, gráfico destacado y capturas. Están en las carpetas es-AR del paquete. El CSV no contiene las imágenes ni publica la app.
+
+El archivo usa UTF-8 y conserva las tildes, viñetas y saltos de párrafo dentro de la descripción completa. Es un CSV estructurado para el importador con IA, no una plantilla de otro formulario de Play Console. No se ejecutó una importación en tu cuenta.
+
+Google documenta la importación con Gemini desde archivos estructurados, como CSV, seguida de revisión de las fichas:
+https://google.play/business/translationservices/
+
+Código de idioma admitido por Google Play:
+https://support.google.com/googleplay/android-developer/answer/9844778?hl=es-419

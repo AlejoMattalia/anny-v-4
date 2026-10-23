@@ -1,14 +1,23 @@
 import {PermissionsAndroid, Platform} from 'react-native';
 import WifiManager from 'react-native-wifi-reborn';
 import {scanLensNetworks} from '../src/services/scanLensNetworks';
-jest.mock('react-native-wifi-reborn', () => ({reScanAndLoadWifiList: jest.fn(), loadWifiList: jest.fn()}));
+jest.mock('react-native-wifi-reborn', () => ({isEnabled: jest.fn(), reScanAndLoadWifiList: jest.fn(), loadWifiList: jest.fn()}));
 beforeEach(() => {
   jest.clearAllMocks();
   jest.replaceProperty(Platform, 'OS', 'android');
+  (WifiManager.isEnabled as jest.Mock).mockReset().mockResolvedValue(true);
   jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
   jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+it('does not scan or use cached networks while client Wi-Fi is off for a hotspot', async () => {
+  (WifiManager.isEnabled as jest.Mock).mockResolvedValue(false);
+  await expect(scanLensNetworks()).resolves.toEqual([]);
+  expect(WifiManager.reScanAndLoadWifiList).not.toHaveBeenCalled();
+  expect(WifiManager.loadWifiList).not.toHaveBeenCalled();
+  expect(PermissionsAndroid.check).not.toHaveBeenCalled();
+  expect(PermissionsAndroid.request).not.toHaveBeenCalled();
+});
 it('requests a fresh scan and keeps signal and frequency for network selection', async () => {
   (WifiManager.reScanAndLoadWifiList as jest.Mock).mockResolvedValue(JSON.stringify([{SSID: 'Home', level: -43, frequency: 2412}, {SSID: ''}]));
   expect(await scanLensNetworks()).toEqual([{ssid: 'Home', signal: -43, frequency: 2412}]);

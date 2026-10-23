@@ -37,11 +37,13 @@ const WifiLensCamera = forwardRef<
   {onReady: (ready: boolean) => void; active?: boolean; onBackgroundReady?: (ready: boolean) => void}
 >(({onReady, active = true, onBackgroundReady}, ref) => {
   const screenFocused = useIsFocused();
-  const focused = screenFocused && active;
   const {trackWifiLensCamera, wifiLensConnection} = useContext(WifiLensContext);
+  const disconnected = wifiLensConnection.manuallyDisconnected;
+  const focused = screenFocused && active && wifiLensConnection.enabled && !disconnected;
   const reconnecting = wifiLensConnection.phase === 'searching' || wifiLensConnection.phase === 'connecting';
   const verifiedSSID = useRef('');
   const reportFrame = useRef<(() => void) | null>(null);
+  const expectNextFrame = useRef<(() => void) | null>(null);
   const streamOwner = useRef(Symbol('wifi-lens-camera'));
   const [session, setSession] = useState<LensPairing | null>(null);
   const sessionRef = useRef<LensPairing | null>(null);
@@ -149,6 +151,35 @@ const WifiLensCamera = forwardRef<
     };
   }, [focused, attempt, trackWifiLensCamera, reconnecting]);
 
+  useEffect(() => {
+    if (!focused || !session) {return;}
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clear = () => {clearTimeout(timer); timer = undefined;};
+    const arm = () => {
+      clear();
+      if (AppState.currentState !== 'active') {return;}
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (sessionRef.current !== session) {return;}
+        // Native transport retries first. If it still produces no displayed
+        // image, stop advertising a ready camera and reopen only local video.
+        // This does not provision BLE, join Wi-Fi or switch off the hotspot.
+        readyCallback.current(false);
+        setAttempt(value => value + 1);
+      }, 15000);
+    };
+    expectNextFrame.current = arm;
+    arm();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {arm();} else {clear();}
+    });
+    return () => {
+      clear();
+      expectNextFrame.current = null;
+      subscription.remove();
+    };
+  }, [focused, session]);
+
   // Roaming may complete in firmware before the next status poll. Replace the
   // native stream only when the verified address/SSID actually changed.
   useEffect(() => {
@@ -194,17 +225,19 @@ const WifiLensCamera = forwardRef<
           onStreamFrame={() => {
             if (focused && sessionRef.current === session) {
               reportFrame.current?.();
+              expectNextFrame.current?.();
             }
           }}
           onStreamReady={() => {
             if (focused && sessionRef.current === session) {
+              expectNextFrame.current?.();
               readyCallback.current(true);
             }
           }}
         />
       ) : (
         <View style={styles.message}>
-          {!active ? <Text style={styles.text}>Streaming pausado</Text> : error ? (
+          {disconnected ? <Text style={styles.text}>Lentes desconectados. Conectalos desde Dispositivos.</Text> : !active ? <Text style={styles.text}>Streaming pausado</Text> : error ? (
             <>
               <Text style={styles.text} accessibilityLiveRegion="polite">
                 {error}

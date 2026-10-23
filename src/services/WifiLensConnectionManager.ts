@@ -8,6 +8,7 @@ export type NearbyLensNetwork = {
 };
 export type WifiLensConnection = {
   enabled: boolean;
+  manuallyDisconnected: boolean;
   preference: NetworkType;
   phase: 'idle' | 'searching' | 'connecting' | 'connected' | 'disconnected';
   ssid: string;
@@ -32,9 +33,24 @@ type Dependencies = {
     signal: AbortSignal,
   ) => Promise<LensPairing>;
   save: (pair: LensPairing) => Promise<void>;
+  saveDisconnected?: (disconnected: boolean) => Promise<void>;
+  release?: () => Promise<void>;
   phoneSSID?: () => Promise<string>;
   sync?: (pair: LensPairing, networks: SavedNetwork[], mode: NetworkType, signal: AbortSignal) => Promise<string>;
 };
+
+const disconnectedMessage = 'Lentes desconectados. Tocá Conectar para volver a usarlos.';
+
+function sessionForNetwork(pair: LensPairing, network: SavedNetwork, address = pair.address): LensPairing {
+  return {...pair, address, networkType: network.type, ssid: network.ssid,
+    hotspotSource: network.type === 'hotspot' ? network.hotspotSource : undefined};
+}
+
+function ownHotspot(saved: SavedNetwork[], mode: NetworkType, pair: LensPairing | null) {
+  return mode === 'hotspot' && pair?.networkType === 'hotspot'
+    ? saved.find(network => network.type === 'hotspot' && network.ssid === pair.ssid && network.hotspotSource === 'this-phone')
+    : undefined;
+}
 
 export function availableSavedNetworks(
   saved: SavedNetwork[],
@@ -68,6 +84,7 @@ export function availableSavedNetworks(
 export class WifiLensConnectionManager {
   state: WifiLensConnection = {
     enabled: false,
+    manuallyDisconnected: false,
     preference: 'wifi',
     phase: 'idle',
     ssid: '',
@@ -78,6 +95,7 @@ export class WifiLensConnectionManager {
     networksMessage: '',
   };
   private revision = 0;
+  private cameraRevision = 0;
   private controller: AbortController | null = null;
   private chain: Promise<unknown> = Promise.resolve();
   private running: Promise<boolean> | null = null;
@@ -87,11 +105,17 @@ export class WifiLensConnectionManager {
   private lastRecoveryAt = 0;
   private networksRevision = 1;
   private syncedRevision = 0;
+  private preferenceWrite: Promise<void> = Promise.resolve();
 
-  networksChanged() {
+  async networksChanged() {
     ++this.networksRevision;
+    if (this.state.manuallyDisconnected) {return;}
+    // Saving credentials enables automatic connection even if startup had no
+    // saved networks. A working connection is only synchronized by poll().
+    this.recoveryArmed = true;
+    this.lastRecoveryAt = -Infinity;
     this.update({networksMessage: 'Redes pendientes de guardar en los lentes…'});
-    void this.poll(false);
+    await this.poll();
   }
 
   private async syncNetworks(pair: LensPairing, signal: AbortSignal, current: () => boolean) {
@@ -119,6 +143,38 @@ export class WifiLensConnectionManager {
     this.changed(this.state);
   }
 
+  /** Restore before startup work is enabled; never probe a deliberately closed link. */
+  restoreDisconnected(disconnected: boolean) {
+    if (!disconnected) {return;}
+    this.cancel();
+    this.recoveryArmed = false;
+    this.lastCameraFrameAt = 0;
+    this.update({manuallyDisconnected: true, phase: 'disconnected', ssid: '', target: '',
+      session: null, showDialog: false, message: disconnectedMessage});
+  }
+
+  private persistDisconnected(disconnected: boolean) {
+    const next = this.preferenceWrite.catch(() => {}).then(() => this.deps.saveDisconnected?.(disconnected));
+    this.preferenceWrite = next;
+    return next;
+  }
+
+  async disconnect() {
+    // Invalidate probes and frame callbacks immediately. Clearing the session
+    // also removes button polling; cameras observe manuallyDisconnected.
+    this.restoreDisconnected(true);
+    const revision = this.revision;
+    const saved = this.persistDisconnected(true);
+    // A cancelled Android Wi-Fi handoff can finish late. Release its binding
+    // after it settles and serialize any later explicit Connect behind this.
+    const released = this.chain.catch(() => {}).then(() => this.deps.release?.());
+    this.chain = released;
+    const results = await Promise.allSettled([saved, released]);
+    if (revision === this.revision && results.some(result => result.status === 'rejected')) {
+      this.update({message: 'Lentes desconectados. No se pudo guardar o completar la desconexión; volvé a intentarlo antes de cerrar Anny.'});
+    }
+  }
+
   setMode(enabled: boolean, preference: NetworkType, refresh = false) {
     if (enabled === this.state.enabled && preference === this.state.preference)
       {return;}
@@ -133,7 +189,7 @@ export class WifiLensConnectionManager {
       ssid: '',
       target: '',
       session: null,
-      message: '',
+      message: this.state.manuallyDisconnected ? disconnectedMessage : '',
       showDialog: false,
       networksMessage: 'Redes pendientes de guardar en los lentes…',
     });
@@ -143,6 +199,7 @@ export class WifiLensConnectionManager {
   async switchNetworkType(preference: NetworkType) {
     if (!this.state.enabled || !this.active) {return false;}
     this.setMode(true, preference);
+    if (this.state.manuallyDisconnected) {return false;}
     // This is an explicit user action. Entering Devices still only reads state.
     return this.refresh(true, true, true);
   }
@@ -150,11 +207,14 @@ export class WifiLensConnectionManager {
   foreground(active: boolean) {
     if (this.active === active) {return;}
     this.active = active;
+    if (this.state.manuallyDisconnected) {return;}
     // Android's Wi-Fi approval dialog temporarily backgrounds Anny. Let the
     // explicit in-flight handoff finish; changing mode/unmount still cancels it.
     if (this.running) {return;}
-    this.cancel();
-    if (this.state.phase !== 'connected') {this.update({
+    // Backgrounding cancels status work, but the native camera survives it.
+    // Keep accepting its frames when the app returns from hotspot settings.
+    this.cancel(true);
+    if (this.state.phase !== 'connected' && !this.state.showDialog) {this.update({
       phase: this.state.enabled ? 'disconnected' : 'idle',
       ssid: '',
       session: null,
@@ -166,6 +226,7 @@ export class WifiLensConnectionManager {
   }
 
   async refreshStatus() {
+    if (this.state.manuallyDisconnected) {return;}
     this.cancel();
     if (this.state.phase !== 'connected') {
       this.update({phase: this.state.enabled ? 'disconnected' : 'idle', ssid: '',
@@ -174,20 +235,27 @@ export class WifiLensConnectionManager {
     await this.poll(false);
   }
 
+  dismissDialog() {
+    this.update({showDialog: false});
+  }
+
   /** Only actual displayed frames from a verified saved network prove liveness. */
   async trackCamera(pair: LensPairing, status: LensStatus): Promise<() => void> {
-    const revision = this.revision;
+    if (this.state.manuallyDisconnected) {return () => {};}
+    const revision = this.cameraRevision;
     const mode = status.network_type || pair.networkType || this.state.preference;
     const saved = await this.deps.networks();
-    if (!status.connected || !saved.some(network => network.type === mode && network.ssid === status.ssid) ||
+    const network = saved.find(value => value.type === mode && value.ssid === status.ssid);
+    const pinned = ownHotspot(saved, this.state.preference, pair);
+    if (!status.connected || !network || (pinned && network.id !== pinned.id) ||
         (status.network_type ? status.network_type !== mode : pair.networkType && pair.networkType !== mode)) {return () => {};}
     return () => {
-      if (revision !== this.revision || !this.active || !this.state.enabled || this.running) {return;}
+      if (revision !== this.cameraRevision || !this.active || !this.state.enabled || this.state.manuallyDisconnected || this.running) {return;}
       this.lastCameraFrameAt = Date.now();
       if (this.state.phase === 'connected' && this.state.ssid === status.ssid &&
           this.state.session?.address === pair.address) {return;}
       this.update({phase: 'connected', ssid: status.ssid, target: '', showDialog: false,
-        session: {...pair, networkType: mode}, message: `Conectado a ${status.ssid}`});
+        session: sessionForNetwork(pair, network), message: `Conectado a ${status.ssid}`});
     };
   }
 
@@ -196,8 +264,9 @@ export class WifiLensConnectionManager {
       Date.now() - this.lastCameraFrameAt < 6000;
   }
 
-  cancel() {
+  cancel(preserveCamera = false) {
     ++this.revision;
+    if (!preserveCamera) {++this.cameraRevision;}
     this.controller?.abort();
     this.controller = null;
     this.running = null;
@@ -210,10 +279,11 @@ export class WifiLensConnectionManager {
       const found = await this.deps.probe(pair, signal);
       if (!current() || !found.state.connected) {return false;}
       const saved = await this.deps.networks();
+      const pinned = ownHotspot(saved, this.state.preference, pair);
       const network = saved.find(value => value.ssid === found.state.ssid &&
         value.type === (found.state.network_type || pair.networkType || this.state.preference));
-      if (!network || !current()) {return false;}
-      const session = {...pair, address: found.address, networkType: network.type};
+      if (!network || (pinned && network.id !== pinned.id) || !current()) {return false;}
+      const session = sessionForNetwork(pair, network, found.address);
       await this.deps.save(session);
       if (!current()) {return false;}
       this.update({phase: 'connected', ssid: network.ssid, target: '', session, showDialog: false,
@@ -257,7 +327,7 @@ export class WifiLensConnectionManager {
               ssid: '',
               session: null,
               target: '',
-              showDialog: false,
+              showDialog: manual,
               message:
                 error instanceof Error
                   ? error.message
@@ -286,11 +356,7 @@ export class WifiLensConnectionManager {
     if (!current()) {return false;}
     if (!found.state.connected || found.state.ssid !== network.ssid)
       {throw new Error('Los lentes todavía no confirmaron la red seleccionada.');}
-    const session = {
-      ...pair,
-      address: found.address,
-      networkType: network.type,
-    };
+    const session = sessionForNetwork(pair, network, found.address);
     await this.deps.save(session);
     if (!current()) {return false;}
     this.update({
@@ -336,10 +402,14 @@ export class WifiLensConnectionManager {
     )
       {return Promise.resolve(false);}
     this.setMode(true, network.type);
+    const resume = this.state.manuallyDisconnected;
+    this.update({manuallyDisconnected: false});
     this.recoveryArmed = true;
     this.lastRecoveryAt = Date.now();
     ++this.networksRevision;
     return this.enqueue(true, async (signal, current) => {
+      if (resume) {await this.persistDisconnected(false);}
+      if (!current()) {return false;}
       const pair = await this.deps.pairing();
       return this.connectCandidate(pair, network, signal, current);
     });
@@ -347,11 +417,16 @@ export class WifiLensConnectionManager {
 
   refresh(force = false, modal = true, switching = false): Promise<boolean> {
     if (!this.state.enabled || !this.active) {return Promise.resolve(false);}
+    const resume = this.state.manuallyDisconnected;
+    if (resume && !force) {return Promise.resolve(false);}
+    if (resume) {this.update({manuallyDisconnected: false});}
     if (this.running && !force) {return this.running;}
     this.recoveryArmed = true;
     this.lastRecoveryAt = Date.now();
     ++this.networksRevision;
     return this.enqueue(modal, async (signal, current) => {
+      if (resume) {await this.persistDisconnected(false);}
+      if (!current()) {return false;}
       const mode = this.state.preference;
       const saved = (await this.deps.networks()).filter(
         network => network.type === mode,
@@ -359,10 +434,12 @@ export class WifiLensConnectionManager {
       if (!current()) {return false;}
       if (!saved.length)
         {throw new Error(
-          `No hay redes ${mode === 'wifi' ? 'WiFi' : 'Hotspot'} guardadas.`,
+          `No hay redes ${mode === 'wifi' ? 'WiFi' : 'Hotspot'} guardadas. Agregá el nombre y la contraseña desde Dispositivos.`,
         );}
       const pair = await this.deps.pairing();
       if (!current()) {return false;}
+      const pinned = ownHotspot(saved, mode, pair);
+      const eligible = pinned ? [pinned] : saved;
       // A fresh scan on each foreground, but never reconfigure a valid link.
       const [scan, probe] = await Promise.allSettled([
         mode === 'wifi' ? this.deps.scan() : Promise.resolve([]),
@@ -376,15 +453,11 @@ export class WifiLensConnectionManager {
         probe.value?.state.connected &&
         (probe.value.state.network_type ? probe.value.state.network_type === mode : !pair.networkType || pair.networkType === mode)
       ) {
-        const network = saved.find(
+        const network = eligible.find(
           value => value.ssid === probe.value!.state.ssid,
         );
         if (network) {
-          const session = {
-            ...pair,
-            address: probe.value.address,
-            networkType: mode,
-          };
+          const session = sessionForNetwork(pair, network, probe.value.address);
           await this.deps.save(session);
           if (!current()) {return false;}
           this.update({
@@ -400,7 +473,7 @@ export class WifiLensConnectionManager {
         }
       }
       let candidates = availableSavedNetworks(
-        saved,
+        eligible,
         scan.status === 'fulfilled' ? scan.value : [],
         mode,
       );
@@ -408,10 +481,18 @@ export class WifiLensConnectionManager {
       // A 5 GHz phone and a 2.4 GHz lens may share this same SSID/router.
       const phoneSSID = mode === 'wifi' && this.deps.phoneSSID ? await this.deps.phoneSSID().catch(() => '') : '';
       if (!current()) {return false;}
+      // A temporary loss must not send the lens to a different phone's hotspot.
+      const previousHotspot = mode === 'hotspot' && pair?.networkType === mode
+        ? candidates.find(network => network.ssid === pair.ssid) : undefined;
+      if (previousHotspot) {candidates = [previousHotspot, ...candidates.filter(network => network.id !== previousHotspot.id)];}
       const phoneNetwork = saved.find(network => network.ssid === phoneSSID);
       if (phoneNetwork) {candidates = [phoneNetwork, ...candidates.filter(network => network.id !== phoneNetwork.id)];}
-      if (!candidates.length)
-        {throw scan.status === 'rejected' ? scan.reason : new Error('No hay redes WiFi guardadas con señal.');}
+      if (!candidates.length && mode === 'wifi') {
+        // Android can hide scan results/SSID even while connected. The lens
+        // performs its own Wi-Fi association over BLE; its confirmed status,
+        // not the phone's scan, decides whether a saved network is usable.
+        candidates = [...saved].sort((a, b) => b.createdAt - a.createdAt);
+      }
       let lastError: unknown;
       for (const network of candidates) {
         if (!current()) {return false;}
@@ -429,9 +510,11 @@ export class WifiLensConnectionManager {
     });
   }
 
-  /** Status polling stays passive unless startup/manual connection armed recovery. */
+  /** Startup, saved-network edits and manual connections enable automatic recovery. */
   async poll(allowRecovery = true) {
-    if (!this.active || !this.state.enabled || this.running || this.controller) {return;}
+    if (!this.active || !this.state.enabled || this.state.manuallyDisconnected || this.running || this.controller) {return;}
+    // Keep a failed manual/startup attempt readable until the user acts.
+    if (this.state.phase === 'disconnected' && this.state.showDialog) {return;}
     // Avoid competing HTTP traffic while fresh camera frames already prove the link.
     if (this.hasRecentCameraFrame() && this.syncedRevision === this.networksRevision) {return;}
     const revision = this.revision;
@@ -476,14 +559,16 @@ export class WifiLensConnectionManager {
       }
       if (!current()) {return;}
       const actualType = found.state.network_type || pair.networkType || mode;
-      const session = {...pair, address: found.address, networkType: actualType};
+      const network = saved.find(value => value.ssid === found.state.ssid && value.type === actualType);
+      const pinned = ownHotspot(saved, mode, pair);
+      if (!found.state.connected || !network || (pinned && network.id !== pinned.id)) {
+        throw new Error(pinned ? `Esperando el hotspot ${pinned.ssid} de este celular.` : 'Lente no conectado. Conectalo desde Dispositivos.');
+      }
+      const session = sessionForNetwork(pair, network, found.address);
       // A reachable previous link remains a valid connection after a failed
       // change. The selected mode still controls the next requested connection.
       await this.syncNetworks(session, controller.signal, current);
       if (!current()) {return;}
-      if (!found.state.connected || !saved.some(network => network.ssid === found.state.ssid && network.type === actualType)) {
-        throw new Error('Lente no conectado. Conectalo desde Dispositivos.');
-      }
       await this.deps.save(session);
       if (!current()) {return;}
       this.update({phase: 'connected', ssid: found.state.ssid, target: '', showDialog: false,

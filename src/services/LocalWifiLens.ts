@@ -1,10 +1,10 @@
 import {hasLocalLensTransport, requestLocalLens} from './LocalLensTransport';
-import {scanLensNetworks} from './scanLensNetworks';
+import {isPhoneWifiEnabled, scanLensNetworks} from './scanLensNetworks';
 import {Buffer} from 'buffer';
 import {NativeModules, PermissionsAndroid, Platform} from 'react-native';
 import WifiManager from 'react-native-wifi-reborn';
 import {normalizeLocalLensAddress} from './localLensAddress';
-import type {NetworkType, SavedNetwork} from '../types/savedNetwork';
+import type {HotspotSource, NetworkType, SavedNetwork} from '../types/savedNetwork';
 import {validateLensWifi, discoverAndConfigureLens} from './LensAutoProvisioning';
 
 export type LensPairing = {
@@ -13,6 +13,8 @@ export type LensPairing = {
   password: string;
   address: string;
   networkType?: 'wifi' | 'hotspot';
+  ssid?: string;
+  hotspotSource?: HotspotSource;
 };
 export type LensStatus = {
   camera: boolean;
@@ -28,7 +30,6 @@ export type LensStatus = {
   network_type?: NetworkType;
   network_count?: number;
 };
-let requestedPhoneWifi = false;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export const saveLensPairing = (pair: LensPairing): Promise<void> =>
   NativeModules.LocalLensCredentials.set(JSON.stringify(pair));
@@ -181,7 +182,8 @@ export async function findLocalLens(
     'No se encontraron los lentes. Encendelos y acercalos al celular.',
   );
 }
-async function joinWifi(ssid: string, password: string, setup = false) {
+async function joinWifi(ssid: string, password: string, preserveHotspot = false) {
+  if (preserveHotspot && !await isPhoneWifiEnabled()) {return;}
   if (Platform.OS === 'android') {
     const granted = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
@@ -191,8 +193,10 @@ async function joinWifi(ssid: string, password: string, setup = false) {
     }
   }
   const current = await WifiManager.getCurrentWifiSSID().catch(() => '');
+  // Recheck after permission dialogs: enabling client Wi-Fi here can stop the
+  // own-phone hotspot. Never call the library's auto-enable path in this mode.
+  if (preserveHotspot && !await isPhoneWifiEnabled()) {return;}
   if (current.replace(/^"|"$/g, '') !== ssid) {
-    requestedPhoneWifi = true;
     await WifiManager.connectToProtectedWifiSSID({
       ssid,
       password: password || null,
@@ -202,7 +206,7 @@ async function joinWifi(ssid: string, password: string, setup = false) {
     });
   }
   if (Platform.OS === 'android') {
-    await WifiManager.forceWifiUsageWithOptions(true, {noInternet: setup});
+    await WifiManager.forceWifiUsageWithOptions(true, {noInternet: false});
   }
 }
 export async function releaseLensNetwork() {
@@ -219,6 +223,7 @@ export async function configureLocalLens(
   onProgress: (message: string) => void,
   signal: AbortSignal,
   networkType: 'wifi' | 'hotspot' = 'wifi',
+  hotspotSource?: HotspotSource,
 ): Promise<LensPairing> {
   if (signal.aborted) {throw new Error('Conexión cancelada.');}
   // A previous Wi-Fi binding must not direct requests to the old LAN when
@@ -229,7 +234,8 @@ export async function configureLocalLens(
     const found = await discoverAndConfigureLens(
       ssid, password, onProgress, signal, pair?.id, networkType,
     );
-    const configured = {...found, address: normalizeLocalLensAddress(found.address), networkType};
+    const configured = {...found, address: normalizeLocalLensAddress(found.address), networkType, ssid,
+      hotspotSource: networkType === 'hotspot' ? hotspotSource : undefined};
     if (signal.aborted) {throw new Error('Conexión cancelada.');}
     onProgress(networkType === 'hotspot'
       ? 'Verificando los lentes en el hotspot…'
@@ -244,18 +250,17 @@ export async function configureLocalLens(
         reachable = state.connected && state.ssid === ssid;
       } catch { /* Inspect the nearby network before deciding to join. */ }
       if (signal.aborted) {throw new Error('Conexión cancelada.');}
-      if (!reachable) {
+      if (!reachable && hotspotSource !== 'this-phone' && await isPhoneWifiEnabled()) {
         const nearby = await scanLensNetworks().catch(() => []);
         const phoneSSID = await WifiManager.getCurrentWifiSSID().catch(() => '');
         if (signal.aborted) {throw new Error('Conexión cancelada.');}
         if (phoneSSID.replace(/^"|"$/g, '') === ssid || nearby.some(network => network.ssid === ssid)) {
           onProgress(`Conectando este celular al hotspot ${ssid}…`);
-          await joinWifi(ssid, password);
-        } else if (requestedPhoneWifi) {
-          await WifiManager.disconnect().catch(() => {});
-          requestedPhoneWifi = false;
+          await joinWifi(ssid, password, true);
         }
       }
+      // A failed/slow status response does not justify disconnecting the
+      // phone's network. Retry the authenticated lens IP with its radio intact.
     }
     await releaseLensNetwork();
     for (let attempt = 0; attempt < 8; attempt++) {
