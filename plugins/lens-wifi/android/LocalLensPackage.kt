@@ -7,7 +7,8 @@ import com.facebook.react.uimanager.ViewManager
 
 class LocalLensPackage : ReactPackage {
     override fun createNativeModules(context: ReactApplicationContext): List<NativeModule> =
-        listOf(LocalLensCredentialsModule(context), LocalLensFramesModule(context), LocalLensNetworkModule(context))
+        listOf(LocalLensCredentialsModule(context), LocalLensFramesModule(context), LocalLensNetworkModule(context),
+            com.voximplant.reactnative.LocalLensCallModule(context))
 
     override fun createViewManagers(context: ReactApplicationContext): List<ViewManager<*, *>> =
         listOf(LocalLensStreamManager())

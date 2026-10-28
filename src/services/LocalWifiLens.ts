@@ -6,6 +6,7 @@ import WifiManager from 'react-native-wifi-reborn';
 import {normalizeLocalLensAddress} from './localLensAddress';
 import type {HotspotSource, NetworkType, SavedNetwork} from '../types/savedNetwork';
 import {validateLensWifi, discoverAndConfigureLens} from './LensAutoProvisioning';
+import {waitForLensOperation} from './lensOperation';
 
 export type LensPairing = {
   id?: string;
@@ -211,9 +212,9 @@ async function joinWifi(ssid: string, password: string, preserveHotspot = false)
 }
 export async function releaseLensNetwork() {
   if (Platform.OS === 'android') {
-    await WifiManager.forceWifiUsageWithOptions(false, {
+    await waitForLensOperation(() => WifiManager.forceWifiUsageWithOptions(false, {
       noInternet: false,
-    }).catch(() => {});
+    }), undefined, 5000, 'No se pudo liberar la conexión anterior.').catch(() => {});
   }
 }
 export async function configureLocalLens(

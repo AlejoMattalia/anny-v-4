@@ -25,6 +25,10 @@ import { speak, stopSpeaking } from '@/lib/voice';
 import WifiLensCamera, { type WifiLensCameraHandle } from '@/components/WifiLensCamera';
 import { loadSettings } from '@/lib/settings-storage';
 import { useWifiLens } from '@/context/wifi-lens-context';
+import { useAppControl } from '@/context/useAppControl';
+import { conversationIsActive, interruptConversation } from '@/services/ConversationRuntime';
+import { analyzeRealtimeImage, setRealtimeMode } from '@/lib/realtime-streaming';
+import { useVoiceActions } from '@/context/voice-commands-context';
 
 type CameraSource = 'glasses' | 'phone';
 type ExpoCameraModule = typeof import('expo-camera');
@@ -193,8 +197,8 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
     void changeCamera('phone');
   }, [focused, foreground, wifiLensConnection.enabled, wifiLensConnection.phase, source, isAnalyzing, changeCamera]);
 
-  const scanImage = useCallback(async () => {
-    if (!activeRef.current || !cameraReady || switchingRef.current || scanningRef.current || speakingRef.current) return;
+  const scanImage = useCallback(async (options: { silent?: boolean; query?: string } = {}) => {
+    if (!activeRef.current || !cameraReady || switchingRef.current || scanningRef.current || speakingRef.current) { if (options.silent) throw new Error('La cámara todavía no está lista o hay un análisis en curso.'); return; }
 
     const generation = generationRef.current;
     const isCurrent = () => mountedRef.current && activeRef.current && generation === generationRef.current;
@@ -222,20 +226,23 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
       setCapturedUri(picture.uri);
       console.info(`[AnnyScanner] captured source=${source} mode=${mode}`);
 
-      const analysis = await analyzeVisualImage(
-        `data:image/jpeg;base64,${picture.base64}`,
-        mode,
-      );
+      let analysis: string;
+      if (options.query) {
+        setRealtimeMode(mode === 'read_text' ? 'facultad' : 'viaje');
+        analysis = await analyzeRealtimeImage(`data:image/jpeg;base64,${picture.base64}`, options.query);
+      } else analysis = await analyzeVisualImage(`data:image/jpeg;base64,${picture.base64}`, mode);
       if (!isCurrent()) return;
       setResult(analysis);
       console.info(`[AnnyScanner] analysis_completed source=${source} mode=${mode}`);
       setIsAnalyzing(false);
-      await readResult(analysis);
+      if (!options.silent) await readResult(analysis);
+      return analysis;
     } catch (scanError) {
       if (!isCurrent()) return;
       const message = getErrorMessage(scanError);
       setError(message);
       setIsAnalyzing(false);
+      if (options.silent) throw scanError;
       await readResult(message);
     } finally {
       if (generation === generationRef.current) scanningRef.current = false;
@@ -245,9 +252,24 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
       }
     }
   }, [cameraReady, mode, readResult, source]);
+  useVoiceActions({ repeat: async () => { cancelScan(); await stopSpeaking(); await scanImage(); } });
+  useAppControl({ mode, source, cameraReady, preferredCamera: wifiLensConnection.phase === 'connected' ? 'glasses' : 'phone', analyzing: isAnalyzing, result, error }, {
+    analyze_camera: async args => {
+      const text = await scanImage({ silent: true, query: args.query });
+      if (!text) throw new Error('No se pudo completar la captura.');
+      return { ok: true, text, mode, source, capturedAt: new Date().toISOString() };
+    },
+    switch_camera: async args => {
+      if (args.camera !== 'phone' && args.camera !== 'glasses') throw new Error('Elegí celular o lentes.');
+      if (args.camera === 'glasses' && wifiLensConnection.phase !== 'connected') throw new Error('Los lentes están desconectados.');
+      manualCameraSelection.current = true;
+      await changeCamera(args.camera); return { ok: true, requestedCamera: args.camera };
+    },
+  });
+
 
   useEffect(() => {
-    if (!focused || !foreground || !cameraReady || switchingCamera) return;
+    if (!focused || !foreground || !cameraReady || switchingCamera || conversationIsActive()) return;
     const timer = setTimeout(() => {
       if (scanningRef.current || speakingRef.current) {
         setCycle((value) => value + 1);
@@ -315,7 +337,7 @@ function VisualScanner({ mode }: { mode: VisualAnalysisMode }) {
           {error ? <Text accessibilityLiveRegion="polite" style={styles.errorText}>{error}</Text> : null}
 
           <View style={styles.controlsRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Detener voz" onPress={() => void stopSpeaking()} style={styles.settingsButton}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Detener voz" onPress={() => { if (!interruptConversation()) void stopSpeaking(); }} style={styles.settingsButton}>
               <Text style={styles.settingsButtonText}>DETENER VOZ</Text>
             </Pressable>
             <Pressable accessibilityRole="button"

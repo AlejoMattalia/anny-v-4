@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,13 +17,14 @@ import TravelModePicker, {
 } from '@/components/travel-mode-picker';
 import {
   CurrentLocation,
-  getCurrentLocation,
+  getExplorationLocation,
 } from '@/lib/current-location';
 import {
   getNearbyPlaces,
   NearbyPlace,
 } from '@/lib/nearby-places';
 import { speak } from '@/lib/voice';
+import { useAppControl } from '@/context/useAppControl';
 
 function formatDistance(distanceMeters: number) {
   if (distanceMeters < 1000) {
@@ -49,7 +50,11 @@ export default function NearbyPlacesScreen() {
   const [error, setError] = useState('');
   const [tripPlace, setTripPlace] = useState<NearbyPlace | null>(null);
 
+  const requestId = useRef(0);
+  useAppControl({ loading: isLoading || isRefreshing, places, location, error }, {});
+
   const loadPlaces = useCallback(async (forceRefresh = false) => {
+    const id = ++requestId.current;
     setError('');
     if (forceRefresh) {
       setIsRefreshing(true);
@@ -58,11 +63,11 @@ export default function NearbyPlacesScreen() {
     }
 
     try {
-      const current = await getCurrentLocation({
-        allowCached: !forceRefresh,
-      });
+      const current = await getExplorationLocation(forceRefresh);
+      if (id !== requestId.current) return;
       setLocation(current);
-      const nearby = await getNearbyPlaces(current);
+      const nearby = await getNearbyPlaces(current, forceRefresh);
+      if (id !== requestId.current) return;
       setPlaces(nearby);
 
       if (nearby.length === 0) {
@@ -73,6 +78,7 @@ export default function NearbyPlacesScreen() {
         );
       }
     } catch (loadError) {
+      if (id !== requestId.current) return;
       const message =
         loadError instanceof Error
           ? loadError.message
@@ -80,17 +86,19 @@ export default function NearbyPlacesScreen() {
       setError(message);
       await speak(message);
     } finally {
+      if (id !== requestId.current) return;
       setIsLoading(false);
       setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
+    const requests = requestId;
     const timeout = setTimeout(() => {
       void loadPlaces();
     }, 0);
 
-    return () => clearTimeout(timeout);
+    return () => { clearTimeout(timeout); requests.current++; };
   }, [loadPlaces]);
 
   const startTrip = (place: NearbyPlace, travelMode: TravelMode) => {

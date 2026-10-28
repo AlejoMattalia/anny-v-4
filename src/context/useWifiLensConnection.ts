@@ -52,7 +52,7 @@ export function useWifiLensConnection(
   const connectOnStartup = useCallback(() => {
     if (startupAttempted.current || !startupSettings.current.initialized || AppState.currentState !== 'active') {return;}
     startupAttempted.current = true;
-    if (startupSettings.current.enabled) {manager.refresh(false, true);}
+    if (startupSettings.current.enabled) {void manager.refresh(false, true);}
   }, [manager]);
   useEffect(() => {
     manager.setMode(enabled, preference, false);

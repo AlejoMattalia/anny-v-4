@@ -26,7 +26,9 @@ import { getCurrentLocation } from '@/lib/current-location';
 import { searchLocations } from '@/lib/location-search';
 import { sendDestinationAlert } from '@/lib/notification-service';
 import { loadSettings } from '@/lib/settings-storage';
-import { listenOnce, speak, stopListening } from '@/lib/voice';
+import { listenOnce, speakGuidance as speak, speak as speakCommand, stopListening } from '@/lib/voice';
+import { useAppControl } from '@/context/useAppControl';
+import { useVoiceActions } from '@/context/voice-commands-context';
 
 type TripState =
   | 'search_start'
@@ -1253,9 +1255,48 @@ export default function StartTripScreen() {
 
   const speakCurrentInstruction = () => {
     if (routeSteps[currentStepIndex]) {
-      void speak(getSimpleStepAnnouncement(routeSteps[currentStepIndex]));
+      void speakCommand(getSimpleStepAnnouncement(routeSteps[currentStepIndex]));
     }
   };
+  useVoiceActions({
+    cancel_trip: () => { finishJourney(); router.replace('/plan-trip'); },
+    repeat: speakCurrentInstruction,
+    next_step: handleNextStep,
+    previous_step: handlePrevStep,
+    board_bus: () => {
+      if (routeSteps[currentStepIndex]?.type === 'bus') handleBoardTransit();
+      else void speakCommand('Todavía no estás en una etapa de colectivo.');
+    },
+    leave_bus: () => {
+      if (routeSteps[currentStepIndex]?.type === 'bus' && boardedTransitStepIndex === currentStepIndex) handleNextStep();
+      else void speakCommand('Primero confirmá que subiste al colectivo.');
+    },
+  }, state === 'navigating');
+
+  useAppControl({
+    phase: state, requestId: params.aiRequest ?? null, routeReady: !loadingRoute && routeSteps.length > 0,
+    loadingRoute, routeError, origin: { name: params.originName || currentAddress, latitude: params.originLat || userLocation?.latitude, longitude: params.originLng || userLocation?.longitude },
+    destination: selectedDest, mode: travelMode, distanceMeters: totalDistance, durationSeconds: totalDuration,
+    currentStep: currentStepIndex + 1, instruction: routeSteps[currentStepIndex] ? getSimpleStepAnnouncement(routeSteps[currentStepIndex]) : null,
+    alternatives: transitAlternatives.map((route, index) => ({ index: index + 1, distanceMeters: route.distance, durationSeconds: route.duration, lines: route.transitLines })),
+  }, {
+    start_trip: () => {
+      if (state === 'navigating') return { ok: true, phase: state };
+      if (state !== 'trip_summary' || loadingRoute || !routeSteps.length) throw new Error(routeError || 'Primero hay que preparar una ruta válida.');
+      handleStartNav(); return { ok: true, requested: 'navigating' };
+    },
+    select_route: args => {
+      if (state !== 'trip_summary') throw new Error('Elegí la ruta antes de comenzar el viaje.');
+      const index = (args.index ?? 0) - 1; const route = transitAlternatives[index];
+      if (!route) throw new Error('Elegí una alternativa de la lista real.');
+      selectTransitRoute(route, index); return { ok: true, selectedRoute: index + 1, distanceMeters: route.distance, durationSeconds: route.duration };
+    },
+    cancel_trip: () => { finishJourney(); return { ok: true, phase: 'search_start' }; },
+    next_step: () => { if (state !== 'navigating') throw new Error('No hay un viaje en marcha.'); handleNextStep(); return { ok: true }; },
+    previous_step: () => { if (state !== 'navigating') throw new Error('No hay un viaje en marcha.'); handlePrevStep(); return { ok: true }; },
+    board_bus: () => { if (state !== 'navigating' || routeSteps[currentStepIndex]?.type !== 'bus') throw new Error('No estás en una etapa de colectivo.'); handleBoardTransit(); return { ok: true }; },
+    leave_bus: () => { if (state !== 'navigating' || routeSteps[currentStepIndex]?.type !== 'bus' || boardedTransitStepIndex !== currentStepIndex) throw new Error('Primero confirmá que subiste al colectivo en la etapa actual.'); handleNextStep(); return { ok: true }; },
+  });
 
   const handleWhereAmI = async () => {
     setShowWhereAmI(true);

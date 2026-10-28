@@ -51,6 +51,10 @@ export default function HelpScreen() {
               <Ionicons color="#286C3A" name="chevron-forward" size={24} />
             </Pressable>
           ))}
+          <Pressable accessibilityRole="button" accessibilityLabel="Escanear códigos QR y de barras" onPress={() => router.push('/qr-scanner' as Href)} style={styles.card}>
+            <View style={styles.iconWrap}><MaterialCommunityIcons color="#FFFFFF" name="qrcode-scan" size={30} /></View>
+            <View style={styles.cardBody}><Text style={styles.cardTitle}>Escanear códigos</Text><Text style={styles.cardDescription}>Productos, páginas web y redes WiFi con el celular o los lentes</Text></View>
+          </Pressable>
           <Pressable
             accessibilityHint="Usa el lente disponible o la cámara del celular"
             accessibilityLabel="Streaming en tiempo real"

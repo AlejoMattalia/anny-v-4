@@ -6,7 +6,8 @@ import { assistanceRole, finishHelp, getPendingCamera, parseCameraResponse, rele
   requestTutorHelp, respondToHelp, startAssistanceCall, type AssistanceCall, type HelpRequest } from '../lib/assistance-api';
 import { identifyAssistanceUser, subscribeAssistancePush } from '../lib/assistance-push';
 import { getCurrentLocation } from '../lib/current-location';
-import { speak } from '../lib/voice';
+import { speak, stopListening, stopSpeaking } from '../lib/voice';
+import { setTutorCallActive } from '../services/ConversationRuntime';
 
 type Phase = 'idle' | 'requesting' | 'waiting' | 'accepted' | 'calling';
 function useAssistanceController() {
@@ -36,6 +37,7 @@ function useAssistanceController() {
     setMessage('Solicitud cancelada.');
   }, [clearWaiting]);
   const endCall = useCallback(async (notify = true) => {
+    setTutorCallActive(false);
     clearWaiting();
     const active = current.current.call;
     current.current.call = null; current.current.incoming = null; current.current.phase = 'idle';
@@ -49,6 +51,9 @@ function useAssistanceController() {
     }
   }, [clearWaiting]);
   const openCall = useCallback((active: AssistanceCall) => {
+    setTutorCallActive(true);
+    stopListening();
+    void stopSpeaking();
     clearWaiting();
     current.current.call = active; current.current.phase = 'calling';
     setCall(active); setPhase('calling'); setMessage('Conectando videollamada…');
@@ -115,7 +120,7 @@ function useAssistanceController() {
     let stopPush = () => {};
     try { stopPush = subscribeAssistancePush(receive); }
     catch { /* reload reports push configuration errors after loading the account. */ }
-    return () => { mounted = false; unsubscribe(); stopPush(); clearWaiting(); };
+    return () => { mounted = false; unsubscribe(); stopPush(); clearWaiting(); setTutorCallActive(false); };
   }, [clearWaiting, endCall, receive]);
 
   useEffect(() => {
@@ -128,9 +133,9 @@ function useAssistanceController() {
   }, [receive]);
 
   const request = async () => {
-    if (busy.current || current.current.phase !== 'idle') return;
+    if (busy.current || current.current.phase !== 'idle') return { ok: false, phase: current.current.phase, message: 'Ya hay una solicitud o llamada en curso.' };
     const id = current.current.user?._id;
-    if (!id || assistanceRole(current.current.user) !== 'PDV') return;
+    if (!id || assistanceRole(current.current.user) !== 'PDV') return { ok: false, message: 'Esta cuenta no puede solicitar asistencia.' };
     busy.current = true;
     clearWaiting();
     const attempt = revision.current;
@@ -160,9 +165,12 @@ function useAssistanceController() {
       }, 65000);
       controller.signal.addEventListener('abort', () => clearTimeout(deadline), { once: true });
       void poll();
+      return { ok: true, phase: current.current.phase, message: 'Solicitud enviada. Esperando al tutor.' };
     } catch (error) {
       if (attempt === revision.current) {
-        cancel(); setMessage(error instanceof Error ? error.message : 'No se pudo solicitar ayuda.');
+        const message = error instanceof Error ? error.message : 'No se pudo solicitar ayuda.';
+        cancel(); setMessage(message);
+        return { ok: false, message };
       }
     } finally { busy.current = false; }
   };
@@ -176,6 +184,7 @@ function useAssistanceController() {
       if (attempt !== revision.current) return;
       if (accepted) { setPhase('accepted'); current.current.phase = 'accepted'; setMessage('Solicitud aceptada. Podés ver la ubicación e iniciar la videollamada.'); }
       else { setIncoming(null); current.current.incoming = null; setPhase('idle'); current.current.phase = 'idle'; }
+      return { ok: true, phase: current.current.phase };
     } finally { busy.current = false; }
   };
   const startCall = async () => {

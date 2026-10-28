@@ -2,6 +2,7 @@ import { io, type Socket } from 'socket.io-client';
 import { normalizeStreamingCurrency } from '../services/StreamingResponse';
 import { STREAMING_MODES, type StreamingMode } from '../services/StreamingModes';
 import { streamingTimeout } from '../services/StreamingClock';
+import { prepareVisionUpload } from './vision-upload';
 
 // Same Socket.IO service and default mode as anny-app-v3/RealtimeStreaming.
 // Image scanning keeps its separate Elastic Beanstalk REST service.
@@ -62,17 +63,18 @@ export async function checkRealtimeAiHealth() {
   }
 }
 
-export async function analyzeRealtimeImage(image: string, query?: string) {
+export async function analyzeRealtimeImage(image: string, query?: string, options: { fast?: boolean } = {}) {
   const requestMode = mode;
   const version = modeVersion;
   const activeSocket = getSocket();
-  await connect(activeSocket);
+  const fineDetail = requestMode === 'facultad' || requestMode === 'supermercado';
+  const [preparedImage] = await Promise.all([prepareVisionUpload(image, options.fast && !fineDetail ? 'stream-fast' : 'stream'), connect(activeSocket)]);
   if (version !== modeVersion) throw new Error('Análisis cancelado por cambio de modo.');
   const requestId = ++nextRequestId;
   const requestedQuery = query?.trim();
   const queryToSend = requestedQuery
     ? `${requestedQuery} Respondé en una frase breve y completa, de hasta 20 palabras.`
-    : STREAMING_MODES[requestMode].query;
+    : options.fast ? `${STREAMING_MODES[requestMode].query} Priorizá una sola referencia útil en hasta 12 palabras.` : STREAMING_MODES[requestMode].query;
   const groundedQuery = `${queryToSend} Basate solo en lo visible: identificá objetos concretos y su posición relativa. No inventes textos, precios ni distancias; si un detalle no se distingue, indicá que no es legible.`;
 
   return new Promise<string>((resolve, reject) => {
@@ -103,7 +105,7 @@ export async function analyzeRealtimeImage(image: string, query?: string) {
     activeSocket.on('error', onError);
     activeSocket.on('disconnect', onDisconnect);
     pending.add(cancel);
-    activeSocket.emit('analyze', { image, query: groundedQuery, mode: requestMode, requestId });
+    activeSocket.emit('analyze', { image: preparedImage, query: groundedQuery, mode: requestMode, requestId, ...(options.fast ? { fast: true } : {}) });
   });
 }
 

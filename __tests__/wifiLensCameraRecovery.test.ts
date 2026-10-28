@@ -1,6 +1,6 @@
 import React from 'react';
 import {act, create, type ReactTestRenderer} from 'react-test-renderer';
-import {AppState} from 'react-native';
+import {AppState, TouchableOpacity} from 'react-native';
 import WifiLensCamera from '../src/components/WifiLensCamera';
 import LocalWifiLens from '../src/components/LocalWifiLens';
 import {findLocalLens} from '../src/services/LocalWifiLens';
@@ -83,57 +83,77 @@ async function appState(state: 'active' | 'background') {
   });
 }
 
-it('marks a stalled hotspot camera unavailable and reopens its local video', async () => {
-  await act(async () => {renderer.root.findByType(LocalWifiLens).props.onStreamReady();});
-  expect(onReady).toHaveBeenLastCalledWith(true);
-  await advance(15000);
-  expect(onReady).toHaveBeenLastCalledWith(false);
-  expect(findLocalLens).toHaveBeenCalledTimes(2);
-  expect(findLocalLens).toHaveBeenLastCalledWith(mockPair, expect.any(AbortSignal));
-  await act(async () => {renderer.root.findByType(LocalWifiLens).props.onStreamReady();});
-  expect(onReady).toHaveBeenLastCalledWith(true);
-});
-
-it('keeps a stream receiving frames and retries only after a full gap', async () => {
-  for (let index = 0; index < 4; index++) {await advance(10000); await frame();}
-  await advance(14999);
+it('lets native UDP-to-MJPEG fallback finish without reopening the camera at 15 seconds', async () => {
+  const stream = renderer.root.findByType(LocalWifiLens);
+  const session = stream.props.session;
+  // UDP negotiation/no-image detection plus opening MJPEG can exceed 15 s.
+  // Restarting here throws away that fallback and negotiates UDP again.
+  await advance(32000);
   expect(findLocalLens).toHaveBeenCalledTimes(1);
-  await advance(1);
-  expect(findLocalLens).toHaveBeenCalledTimes(2);
+  expect(renderer.root.findByType(LocalWifiLens)).toBe(stream);
+  expect(stream.props.session).toBe(session);
+  await act(async () => {stream.props.onStreamReady();});
+  expect(onReady).toHaveBeenLastCalledWith(true);
 });
 
-it('recovers a video that never delivers its first frame', async () => {
-  await advance(15000);
-  expect(findLocalLens).toHaveBeenCalledTimes(2);
+it('preserves an established native stream during a long frame gap', async () => {
+  const stream = renderer.root.findByType(LocalWifiLens);
+  await act(async () => {renderer.root.findByType(LocalWifiLens).props.onStreamReady();});
+  expect(onReady).toHaveBeenLastCalledWith(true);
+  await advance(45000);
+  expect(findLocalLens).toHaveBeenCalledTimes(1);
+  expect(renderer.root.findByType(LocalWifiLens)).toBe(stream);
+  await frame();
+  expect(stopGlassesStreamingService).not.toHaveBeenCalled();
+});
+
+it('keeps the same receiver across frames and slow delivery', async () => {
+  for (let index = 0; index < 4; index++) {await advance(10000); await frame();}
+  await advance(30000);
+  await frame();
+  expect(findLocalLens).toHaveBeenCalledTimes(1);
+});
+
+it('waits for a real native image before advertising the camera as ready', async () => {
+  await advance(30000);
   expect(onReady).not.toHaveBeenCalledWith(true);
+  await act(async () => {renderer.root.findByType(LocalWifiLens).props.onStreamReady();});
+  expect(onReady).toHaveBeenLastCalledWith(true);
 });
 
-it('does not restart a background stream and gives it time to resume', async () => {
+it('preserves native recovery when backgrounding and returning from hotspot settings', async () => {
   await advance(10000);
   await appState('background');
   await advance(60000);
   expect(findLocalLens).toHaveBeenCalledTimes(1);
   await appState('active');
-  await advance(14999);
+  await advance(30000);
+  await frame();
   expect(findLocalLens).toHaveBeenCalledTimes(1);
-  await advance(1);
-  expect(findLocalLens).toHaveBeenCalledTimes(2);
 });
 
-it('stops automatic video retries when the lens is no longer reachable', async () => {
+it('shows an unreachable lens and allows an explicit retry', async () => {
+  await act(async () => {renderer.update(React.createElement(WifiLensCamera, {onReady, active: false}));});
   (findLocalLens as jest.Mock).mockRejectedValueOnce(new Error('Lente fuera de alcance'));
-  await advance(15000);
+  await act(async () => {renderer.update(React.createElement(WifiLensCamera, {onReady}));});
   expect(renderer.root.findAllByType(LocalWifiLens)).toHaveLength(0);
   expect(JSON.stringify(renderer.toJSON())).toContain('Lente fuera de alcance');
   await advance(60000);
   expect(findLocalLens).toHaveBeenCalledTimes(2);
+  await act(async () => {renderer.root.findByType(TouchableOpacity).props.onPress();});
+  expect(findLocalLens).toHaveBeenCalledTimes(3);
+  expect(renderer.root.findAllByType(LocalWifiLens)).toHaveLength(1);
 });
 
-it('cancels frame monitoring when the camera is paused', async () => {
+it('closes the receiver when paused and opens it again only on resume', async () => {
   await act(async () => {renderer.update(React.createElement(WifiLensCamera, {onReady, active: false}));});
   await advance(60000);
   expect(findLocalLens).toHaveBeenCalledTimes(1);
   expect(onReady).toHaveBeenLastCalledWith(false);
+  expect(renderer.root.findAllByType(LocalWifiLens)).toHaveLength(0);
+  await act(async () => {renderer.update(React.createElement(WifiLensCamera, {onReady}));});
+  expect(findLocalLens).toHaveBeenCalledTimes(2);
+  expect(renderer.root.findAllByType(LocalWifiLens)).toHaveLength(1);
 });
 
 it('closes the native stream and background service and blocks capture after manual disconnect', async () => {

@@ -1,4 +1,6 @@
 import * as Location from 'expo-location';
+import Constants from 'expo-constants';
+import { fetchMapJson, mapDeadline } from './map-request';
 
 export interface CurrentLocation {
   latitude: number;
@@ -26,8 +28,10 @@ async function locate(
   allowCached: boolean,
   maxCachedAgeMs: number,
   maxCachedAccuracyMeters: number,
+  highAccuracy: boolean,
 ): Promise<CurrentLocation> {
-  const permission = await Location.requestForegroundPermissionsAsync();
+  const currentPermission = await Location.getForegroundPermissionsAsync();
+  const permission = currentPermission.status === Location.PermissionStatus.GRANTED ? currentPermission : await Location.requestForegroundPermissionsAsync();
   if (permission.status !== Location.PermissionStatus.GRANTED) {
     throw new Error(
       'No hay permiso de ubicación. Podés habilitarlo desde la configuración del teléfono.',
@@ -48,10 +52,10 @@ async function locate(
       return cachedLocation;
     }
 
-    const cached = await Location.getLastKnownPositionAsync({
+    const cached = await mapDeadline(Location.getLastKnownPositionAsync({
       maxAge: maxCachedAgeMs,
       requiredAccuracy: maxCachedAccuracyMeters,
-    });
+    }), 2000).catch(() => null);
 
     if (cached) {
       cachedLocation = toCurrentLocation(cached);
@@ -60,7 +64,7 @@ async function locate(
   }
 
   const current = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced,
+    accuracy: highAccuracy ? Location.Accuracy.High : Location.Accuracy.Balanced,
     mayShowUserSettingsDialog: true,
   });
 
@@ -83,15 +87,22 @@ export async function getCurrentLocation(options?: {
   allowCached?: boolean;
   maxCachedAgeMs?: number;
   maxCachedAccuracyMeters?: number;
+  highAccuracy?: boolean;
 }): Promise<CurrentLocation> {
   const allowCached = options?.allowCached ?? true;
   const maxCachedAgeMs = options?.maxCachedAgeMs ?? MAX_CACHED_LOCATION_AGE_MS;
   const maxCachedAccuracyMeters = options?.maxCachedAccuracyMeters ?? MAX_CACHED_LOCATION_ACCURACY_METERS;
-  const key = allowCached ? `${maxCachedAgeMs}:${maxCachedAccuracyMeters}` : 'fresh';
+  const highAccuracy = options?.highAccuracy ?? false;
+  const key = `${allowCached ? `${maxCachedAgeMs}:${maxCachedAccuracyMeters}` : 'fresh'}:${highAccuracy}`;
   const pending = pendingLocations.get(key);
   if (pending) return pending;
 
-  const request = locate(allowCached, maxCachedAgeMs, maxCachedAccuracyMeters).finally(() => {
+  let timeout: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error('No pudimos obtener tu ubicación. Revisá que el GPS esté encendido e intentá nuevamente.')), 20000);
+  });
+  const request = Promise.race([locate(allowCached, maxCachedAgeMs, maxCachedAccuracyMeters, highAccuracy), deadline]).finally(() => {
+    clearTimeout(timeout);
     pendingLocations.delete(key);
   });
   pendingLocations.set(key, request);
@@ -114,21 +125,38 @@ export function formatGeocodedAddress(
       Boolean(part) && allParts.indexOf(part) === index,
   );
 
-  return address.formattedAddress || parts.join(', ');
+  return street ? parts.join(', ') : address.formattedAddress || parts.join(', ');
 }
 
 export async function reverseGeocodeLocation(
   location: Pick<CurrentLocation, 'latitude' | 'longitude'>,
 ) {
   const coordinates = `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+  let approximateAddress = '';
   try {
-    const [address] = await Location.reverseGeocodeAsync(location);
-    if (!address) {
-      return coordinates;
-    }
+    const [address] = await mapDeadline(Location.reverseGeocodeAsync(location), 4000);
+    if (address?.street) return formatGeocodedAddress(address);
+    if (address) approximateAddress = formatGeocodedAddress(address);
+  } catch { /* Some Android devices have no working native geocoder. */ }
+  const key = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY?.trim() || Constants.expoConfig?.extra?.googleMapKey;
+  if (key) try {
+    const params = new URLSearchParams({ latlng: `${location.latitude},${location.longitude}`, language: 'es', key: String(key) });
+    const data = await fetchMapJson(`https://maps.googleapis.com/maps/api/geocode/json?${params}`);
+    const address = data.results?.find((item: any) => item.address_components?.some((part: any) => part.types?.includes('route')));
+    if (data.status === 'OK' && address?.formatted_address) return address.formatted_address as string;
+  } catch { /* Try the open map before giving up on the address. */ }
+  try {
+    const params = new URLSearchParams({ format: 'jsonv2', lat: String(location.latitude), lon: String(location.longitude), zoom: '18', 'accept-language': 'es' });
+    const data = await fetchMapJson(`https://nominatim.openstreetmap.org/reverse?${params}`);
+    const address = data.address;
+    const street = address?.road || address?.pedestrian || address?.footway || address?.residential;
+    if (street) return [street, address.house_number, address.suburb, address.city || address.town || address.village].filter(Boolean).join(', ');
+  } catch { /* Coordinates remain available without internet. */ }
+  return approximateAddress ? `${approximateAddress}. No pude determinar la calle. Coordenadas: ${coordinates}` : `No pude determinar la dirección. Coordenadas: ${coordinates}`;
+}
 
-    return formatGeocodedAddress(address) || coordinates;
-  } catch {
-    return coordinates;
-  }
+// Exploration can report an approximate fix with its measured accuracy. Route
+// selection keeps the stricter GPS checks in ConversationLocation.
+export function getExplorationLocation(forceRefresh = false) {
+  return getCurrentLocation({ allowCached: !forceRefresh, highAccuracy: true, maxCachedAgeMs: 30000, maxCachedAccuracyMeters: 100 });
 }

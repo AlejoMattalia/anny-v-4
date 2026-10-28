@@ -4,6 +4,7 @@ import {
 } from '../src/services/WifiLensConnectionManager';
 import type {SavedNetwork} from '../src/types/savedNetwork';
 import type {LensPairing} from '../src/services/LocalWifiLens';
+import {LensDiscoveryError} from '../src/services/lensOperation';
 
 const network = (
   ssid: string,
@@ -52,6 +53,61 @@ function setup(saved = [network('Home')]) {
   return {deps, manager};
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+it('ends a missing-lens search once instead of repeating it for every saved network', async () => {
+  jest.useFakeTimers();
+  try {
+    const {manager, deps} = setup([network('Home'), network('Office')]);
+    deps.pairing.mockResolvedValue(null);
+    deps.scan.mockResolvedValue([]);
+    deps.configure.mockRejectedValue(new LensDiscoveryError('No se encontraron los lentes por Bluetooth.'));
+    expect(await manager.refresh(false, false)).toBe(false);
+    expect(deps.configure).toHaveBeenCalledTimes(1);
+    expect(manager.state).toMatchObject({phase: 'disconnected', showDialog: false});
+    await jest.advanceTimersByTimeAsync(60000);
+    await manager.poll();
+    expect(deps.configure).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {jest.useRealTimers();}
+});
+
+it.each([false, true])('bounds a stalled connection and lets a new explicit attempt finish (manual=%s)', async manual => {
+  jest.useFakeTimers();
+  try {
+    const {manager, deps} = setup();
+    deps.pairing.mockResolvedValue(null);
+    let finish!: (value: LensPairing) => void;
+    deps.configure.mockImplementationOnce(() => new Promise(resolve => {finish = resolve;}));
+    const pending = manager.refresh(false, manual);
+    await jest.advanceTimersByTimeAsync(manual ? 180000 : 90000);
+    const signal = deps.configure.mock.calls[0][3] as AbortSignal;
+    expect(signal.aborted).toBe(true);
+    expect(manager.state).toMatchObject({phase: 'disconnected', showDialog: manual});
+    expect(manager.state.message).toContain('tardó demasiado');
+    await jest.advanceTimersByTimeAsync(3500);
+    expect(await pending).toBe(false);
+    expect(await manager.refresh(true, true)).toBe(true);
+    finish(pair);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(manager.state.phase).toBe('connected');
+    expect(deps.save).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {jest.useRealTimers();}
+});
+
+it('can confirm an already reachable lens even when the native Wi-Fi scan never returns', async () => {
+  jest.useFakeTimers();
+  try {
+    const {manager, deps} = setup();
+    deps.scan.mockImplementationOnce(() => new Promise(() => {}));
+    const pending = manager.refresh(false, false);
+    await jest.advanceTimersByTimeAsync(12000);
+    expect(await pending).toBe(true);
+    expect(manager.state).toMatchObject({phase: 'connected', showDialog: false});
+    expect(deps.configure).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {jest.useRealTimers();}
+});
 
 it('disconnects, releases the route and rejects all automatic recovery and camera frames', async () => {
   const {manager, deps} = setup();

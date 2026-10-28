@@ -58,6 +58,8 @@ internal class LocalLensFrameQueue {
     fun waitMs(now: Long): Long = if (frames.isEmpty()) 0 else (nextAt - now).coerceAtLeast(1)
     fun clear() { frames.clear() }
     private fun expire(now: Long) {
-        while (frames.isNotEmpty() && now - frames.first().receivedAt > 250) frames.removeFirst()
+        // Keep the startup cushion and even playback, but do not carry a
+        // quarter-second backlog after a burst or a delayed decoder.
+        while (frames.isNotEmpty() && now - frames.first().receivedAt > 150) frames.removeFirst()
     }
 }

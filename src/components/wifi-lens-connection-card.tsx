@@ -17,6 +17,7 @@ export function WifiLensConnectionCard({ showManage = true, compact = false }: {
     </View>
     {!compact ? <Text accessibilityLiveRegion="polite" style={styles.status}>{label}</Text> : null}
     {connection.phase === 'connected' ? <Pressable accessibilityRole="button" accessibilityLabel="Desconectar lentes" onPress={() => void disconnect()} style={styles.disconnect}><Text style={styles.disconnectText}>Desconectar</Text></Pressable> : null}
+    {connection.phase === 'searching' || connection.phase === 'connecting' ? <Pressable accessibilityRole="button" accessibilityLabel="Cancelar conexión de lentes" onPress={() => void disconnect()} style={styles.disconnect}><Text style={styles.disconnectText}>Cancelar conexión</Text></Pressable> : null}
     {connection.manuallyDisconnected ? <Pressable accessibilityRole="button" accessibilityLabel="Conectar lentes" onPress={() => void manager.refresh(true, true)}><Text style={styles.link}>Conectar</Text></Pressable> : null}
     {showManage ? <Pressable accessibilityRole="button" onPress={() => router.push('/bluetooth-devices')}><Text style={styles.link}>Administrar conexión</Text></Pressable> : null}
   </View>;

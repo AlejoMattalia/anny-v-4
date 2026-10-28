@@ -21,10 +21,11 @@ import {
 import TravelModePicker, {
   TravelMode,
 } from '@/components/travel-mode-picker';
-import { getCurrentLocation } from '@/lib/current-location';
+import { getExplorationLocation } from '@/lib/current-location';
 import {
   LocationSearchResult,
   searchLocations,
+  searchNearbyLocations,
 } from '@/lib/location-search';
 import { getSavedLocations } from '@/lib/saved-locations';
 import { speak } from '@/lib/voice';
@@ -54,6 +55,7 @@ export default function MapExplorerScreen() {
 
   const [userLocation, setUserLocation] =
     useState<MapCoordinate>(initialLocation);
+  const [hasUserLocation, setHasUserLocation] = useState(false);
   const [markers, setMarkers] = useState<ExplorerMapMarker[]>([]);
   const [selectedPlace, setSelectedPlace] =
     useState<LocationSearchResult | null>(null);
@@ -71,7 +73,7 @@ export default function MapExplorerScreen() {
     let active = true;
 
     async function initialize() {
-      const savedLocations = await getSavedLocations();
+      const savedLocations = await getSavedLocations().catch(() => []);
       if (active) {
         const savedMarkers = savedLocations.map((location) => ({
           id: `saved-${location.id}`,
@@ -107,13 +109,14 @@ export default function MapExplorerScreen() {
       }
 
       try {
-        const current = await getCurrentLocation();
+        const current = await getExplorationLocation();
         if (!active) return;
         const coordinates = {
           latitude: current.latitude,
           longitude: current.longitude,
         };
         setUserLocation(coordinates);
+        setHasUserLocation(true);
         if (!hasInitialTarget) {
           setFocusLocation(coordinates);
           setFocusKey((key) => key + 1);
@@ -153,13 +156,16 @@ export default function MapExplorerScreen() {
     let active = true;
     const timeout = setTimeout(async () => {
       setIsSearching(true);
-      const found = await searchLocations(query, {
-        userCoords: userLocation,
-        limit: 6,
-      });
-      if (active) {
-        setResults(found);
-        setIsSearching(false);
+      try {
+        const found = hasUserLocation
+          ? (await searchNearbyLocations(query, userLocation)).slice(0, 6)
+          : await searchLocations(query, { limit: 6 });
+        if (active) {
+          setResults(found);
+          setIsSearching(false);
+        }
+      } catch (error) {
+        if (active) { setResults([]); setIsSearching(false); setLocationError(error instanceof Error ? error.message : 'No se pudo buscar en el mapa.'); }
       }
     }, 450);
 
@@ -167,11 +173,23 @@ export default function MapExplorerScreen() {
       active = false;
       clearTimeout(timeout);
     };
-  }, [query, userLocation]);
+  }, [query, userLocation, hasUserLocation]);
 
   const focusMap = (coordinate: MapCoordinate) => {
     setFocusLocation(coordinate);
     setFocusKey((key) => key + 1);
+  };
+
+  const recenter = async () => {
+    setIsLocating(true);
+    try {
+      const current = await getExplorationLocation(true);
+      setUserLocation(current); setHasUserLocation(true); setLocationError('');
+      focusMap(current);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo obtener tu ubicación.';
+      setLocationError(message); void speak(message);
+    } finally { setIsLocating(false); }
   };
 
   const handleQueryChange = (value: string) => {
@@ -206,7 +224,7 @@ export default function MapExplorerScreen() {
   const startTripToSelectedPlace = (travelMode: TravelMode) => {
     if (!selectedPlace) return;
     setShowTravelModes(false);
-    const originParams = locationError
+    const originParams = !hasUserLocation
       ? {}
       : {
           originLat: userLocation.latitude.toString(),
@@ -319,7 +337,8 @@ export default function MapExplorerScreen() {
 
           <Pressable
             accessibilityLabel="Centrar mapa en mi ubicación"
-            onPress={() => focusMap(userLocation)}
+            disabled={isLocating}
+            onPress={() => void recenter()}
             style={styles.recenterButton}>
             <MaterialCommunityIcons color="#FFFFFF" name="crosshairs-gps" size={23} />
           </Pressable>

@@ -6,12 +6,14 @@ import { getPendingCamera, releaseAssistanceCamera, requestTutorHelp, respondToH
 import { subscribeAssistancePush } from '../../src/lib/assistance-push';
 import { getCurrentLocation } from '../../src/lib/current-location';
 import { router } from 'expo-router';
+import { stopListening, stopSpeaking } from '../../src/lib/voice';
+import { isTutorCallActive } from '../../src/services/ConversationRuntime';
 
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() }, AppState: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) } }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('../../src/lib/auth', () => ({ getAuthSession: jest.fn(), subscribeAuthSession: jest.fn(() => jest.fn()) }));
 jest.mock('../../src/lib/current-location', () => ({ getCurrentLocation: jest.fn() }));
-jest.mock('../../src/lib/voice', () => ({ speak: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../src/lib/voice', () => ({ speak: jest.fn().mockResolvedValue(undefined), stopListening: jest.fn(), stopSpeaking: jest.fn() }));
 jest.mock('../../src/lib/assistance-push', () => ({ identifyAssistanceUser: jest.fn().mockResolvedValue(undefined), subscribeAssistancePush: jest.fn(() => jest.fn()) }));
 jest.mock('../../src/lib/assistance-api', () => ({
   ...jest.requireActual('../../src/lib/assistance-api'),
@@ -47,7 +49,10 @@ it('opens one call when both polling and push deliver the same answer', async ()
   await act(async () => { receive({ ...call, type: 'responseCamera' }); receive({ ...call, type: 'responseCamera' }); });
   expect(router.push).toHaveBeenCalledTimes(1);
   expect(state.call).toEqual(call);
+  expect(isTutorCallActive()).toBe(true);
+  expect(stopListening).toHaveBeenCalled(); expect(stopSpeaking).toHaveBeenCalled();
   await act(async () => { await state.endCall(); });
+  expect(isTutorCallActive()).toBe(false);
   expect(releaseAssistanceCamera).toHaveBeenCalledWith(call);
 });
 it('ignores late push after cancellation and stops polling', async () => {
@@ -61,7 +66,7 @@ it('cannot send a help request after cancellation during GPS acquisition', async
   let resolve!: (value: unknown) => void;
   (getCurrentLocation as jest.Mock).mockReturnValue(new Promise(done => { resolve = done; }));
   await mount();
-  let request!: Promise<void>;
+  let request!: ReturnType<typeof state.request>;
   await act(async () => { request = state.request(); });
   await act(async () => { state.cancel(); resolve({ latitude: 1, longitude: 1 }); await request; });
   expect(requestTutorHelp).not.toHaveBeenCalled(); expect(state.phase).toBe('idle');
@@ -80,7 +85,7 @@ it('releases a reservation that completes after logout instead of opening a call
   (startAssistanceCall as jest.Mock).mockReturnValue(new Promise(done => { resolve = done; }));
   await mount('TUTOR');
   await act(async () => { receive({ type: 'help', _id: 'pdv', currentLocation: { latitude: 1, longitude: 2 } }); await state.respond(true); });
-  let request!: Promise<void>;
+  let request!: ReturnType<typeof state.request>;
   await act(async () => { request = state.startCall(); });
   (getAuthSession as jest.Mock).mockResolvedValue(null);
   await act(async () => { (subscribeAuthSession as jest.Mock).mock.calls.at(-1)[0](); });

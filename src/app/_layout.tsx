@@ -5,6 +5,9 @@ import { useEffect } from 'react';
 
 import { WifiLensProvider } from '@/context/wifi-lens-context';
 import { AssistanceProvider } from '@/context/assistance-context';
+import { VoiceCommandsProvider } from '@/context/voice-commands-context';
+import { ConversationProvider } from '@/context/conversation-context';
+import { VoiceCommandButton } from '@/components/voice-command-button';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ScreenVoiceAnnouncer } from '@/components/screen-voice-announcer';
 import { warmCurrentLocation } from '@/lib/current-location';
@@ -44,6 +47,8 @@ export default function RootLayout() {
       }}>
       <AssistanceProvider>
       <WifiLensProvider>
+      <VoiceCommandsProvider>
+      <ConversationProvider>
       <AnimatedSplashOverlay />
       <StatusBar style="dark" />
       {/* Placa con activación y Bluetooth Classic deshabilitados. Flujo WiFi de v3. */}
@@ -54,6 +59,9 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: '#FCFCFC' },
         }}
       />
+      <VoiceCommandButton />
+      </ConversationProvider>
+      </VoiceCommandsProvider>
       </WifiLensProvider>
       </AssistanceProvider>
     </ThemeProvider>

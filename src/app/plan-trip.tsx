@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -23,6 +23,7 @@ import { searchLocations } from '@/lib/location-search';
 import { getSavedLocations, LocationItem } from '@/lib/saved-locations';
 import { addSavedJourney } from '@/lib/saved-journeys';
 import { speak } from '@/lib/voice';
+import { normalizeVoiceText } from '@/services/VoiceCommands';
 
 type TravelMode = 'transit' | 'driving' | 'walking';
 
@@ -70,7 +71,8 @@ const travelModes: {
 ];
 
 export default function PlanTripScreen() {
-  const params = useLocalSearchParams<{ mode?: string }>();
+  const focused = useIsFocused();
+  const params = useLocalSearchParams<{ mode?: string; destination?: string; travelMode?: string; voiceRequest?: string }>();
   const isSimulationMode = params.mode === 'simulate';
   const [gpsLocation, setGpsLocation] = useState<LocationItem | null>(null);
   const [origin, setOrigin] = useState<LocationItem | null>(null);
@@ -86,6 +88,33 @@ export default function PlanTripScreen() {
   const [isSavingJourney, setIsSavingJourney] = useState(false);
   const [journeyTitle, setJourneyTitle] = useState('');
   const lastResultsAnnouncement = useRef('');
+  const preparedVoiceRequest = useRef('');
+  const voiceOriginLatitude = origin?.latitude ?? gpsLocation?.latitude;
+  const voiceOriginLongitude = origin?.longitude ?? gpsLocation?.longitude;
+  useEffect(() => {
+    if (!focused || !params.destination || voiceOriginLatitude === undefined || voiceOriginLongitude === undefined) return;
+    const request = params.voiceRequest ?? params.destination;
+    if (preparedVoiceRequest.current === request) return;
+    let cancelled = false;
+    const requestedMode = params.travelMode;
+    setTravelMode(requestedMode === 'driving' || requestedMode === 'transit' ? requestedMode : 'walking');
+    void (async () => {
+      try {
+        const query = params.destination!;
+        const locations = await getSavedLocations();
+        const saved = locations.find(location => normalizeVoiceText(location.name) === normalizeVoiceText(query));
+        const found = saved ?? (await searchLocations(query, { userCoords: { latitude: voiceOriginLatitude, longitude: voiceOriginLongitude } }))[0];
+        if (cancelled) return;
+        preparedVoiceRequest.current = request;
+        if (!found) { setActiveSearch('destination'); setSearchQuery(query); await speak(`No encontré ${query}. Elegí el destino en la búsqueda.`); return; }
+        setDestination(found as LocationItem);
+        await speak(`Destino ${found.name}. Revisá la ruta y elegí Iniciar viaje.`);
+      } catch {
+        if (!cancelled) { setActiveSearch('destination'); setSearchQuery(params.destination!); void speak('No pude buscar el destino. Podés elegirlo en la búsqueda.'); }
+      } finally { if (!cancelled) preparedVoiceRequest.current = request; }
+    })();
+    return () => { cancelled = true; };
+  }, [params.destination, params.travelMode, params.voiceRequest, voiceOriginLatitude, voiceOriginLongitude, focused]);
 
   // Load permissions, user coordinates, and saved locations
   useEffect(() => {

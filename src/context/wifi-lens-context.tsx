@@ -65,7 +65,7 @@ export function WifiLensProvider({ children }: PropsWithChildren) {
   const trackWifiLensCamera = useCallback((pair: LensPairing, status: LensStatus) => manager.trackCamera(pair, status), [manager]);
   const disconnect = useCallback(() => manager.disconnect(), [manager]);
   const connectionFailed = connection.phase === 'disconnected';
-  const closeDialog = () => connectionFailed ? manager.dismissDialog() : void manager.refreshStatus();
+  const closeDialog = () => connectionFailed ? manager.dismissDialog() : void manager.disconnect();
   return <WifiLensContext.Provider value={{ wifiLensConnection: connection, manager, networks, networkPreference: preference, setNetworkPreference, connect, disconnect, trackWifiLensCamera }}>
     {children}
     <Modal visible={connection.showDialog && ['searching', 'connecting', 'disconnected'].includes(connection.phase)} transparent animationType="fade" onRequestClose={closeDialog}>

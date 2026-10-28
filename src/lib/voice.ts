@@ -1,6 +1,7 @@
 import * as Speech from 'expo-speech';
+import { relayConversationSpeech, conversationIsActive, isTutorCallActive, type ConversationSpeech } from '@/services/ConversationRuntime';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 
 import { loadSettings } from '@/lib/settings-storage';
 import { streamingDelay, streamingTimeout } from '@/services/StreamingClock';
@@ -13,8 +14,21 @@ type ListenOptions = {
 
 let latestSpeechToken = 0;
 let spanishVoicePromise: Promise<Speech.Voice | undefined> | undefined;
+let cancelActiveListen: (() => void) | undefined;
+let listening = false;
+let guidancePaused = false;
+let lastSpokenText = '';
+let listeningGeneration = 0;
+let recognitionDrain: Promise<void> = Promise.resolve();
+export const getLastSpokenText = () => lastSpokenText;
+export const setGuidancePaused = (paused: boolean) => { guidancePaused = paused; };
+export async function speakGuidance(text: string) { if (!guidancePaused) await speak(text, { priority: 'guidance' }); }
 
-export async function speak(text: string, options: { onError?: (error: Error) => void } = {}) {
+export async function speak(text: string, options: { onError?: (error: Error) => void; remember?: boolean } & ConversationSpeech = {}) {
+  // Screen announcements and camera analyses must not be heard as user commands.
+  if (listening || isTutorCallActive()) return;
+  if (options.remember !== false) lastSpokenText = text;
+  if (await relayConversationSpeech(text, options)) return;
   const speechToken = ++latestSpeechToken;
   await Speech.stop();
   const settings = await loadSettings();
@@ -26,7 +40,7 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
   }).catch(() => undefined);
   const voice = await spanishVoicePromise;
 
-  if (speechToken !== latestSpeechToken) {
+  if (speechToken !== latestSpeechToken || isTutorCallActive()) {
     return;
   }
 
@@ -50,6 +64,7 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
       useApplicationAudioSession: false,
       pitch: 1,
       rate: settings.voiceRate,
+      onStart: options.onStart,
       onDone: finish,
       onStopped: finish,
       onError: (error) => {
@@ -59,7 +74,7 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
     });
   });
 
-  await streamingDelay(250);
+  if (options.priority !== 'stream') await streamingDelay(250);
 }
 
 export async function stopSpeaking() {
@@ -68,7 +83,10 @@ export async function stopSpeaking() {
 }
 
 export async function requestVoicePermissions(options: { showSettingsAlert?: boolean } = {}) {
-  const permissions = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+  // Android requestPermissions can pause/resume the Activity even when the
+  // permission is already granted. AppState would then cancel the new listen.
+  const current = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+  const permissions = current.granted ? current : await ExpoSpeechRecognitionModule.requestPermissionsAsync();
 
   if (!permissions.granted) {
     if (options.showSettingsAlert) {
@@ -81,28 +99,67 @@ export async function requestVoicePermissions(options: { showSettingsAlert?: boo
   return permissions;
 }
 
+export async function requestConversationMicrophone() {
+  // Realtime uses microphone audio directly, without the OS speech recognizer.
+  if (Platform.OS === 'android') {
+    const permission = PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
+    const granted = await PermissionsAndroid.check(permission) ||
+      await PermissionsAndroid.request(permission) === PermissionsAndroid.RESULTS.GRANTED;
+    if (!granted) throw new Error('Permití el acceso al micrófono en los permisos de Anny para conversar.');
+    return;
+  }
+  const current = await ExpoSpeechRecognitionModule.getMicrophonePermissionsAsync();
+  const permission = current.granted ? current : await ExpoSpeechRecognitionModule.requestMicrophonePermissionsAsync();
+  if (!permission.granted) throw new Error('Permití el acceso al micrófono en los permisos de Anny para conversar.');
+}
+
 export async function checkVoicePermissions() {
   const permissions = await ExpoSpeechRecognitionModule.getPermissionsAsync();
   return permissions;
 }
 
 export function stopListening() {
-  ExpoSpeechRecognitionModule.abort();
+  listeningGeneration++;
+  const active = cancelActiveListen;
+  cancelActiveListen?.();
+  // abort() emits an error and an asynchronous end even when idle. Never send
+  // those stale events into the next recognition session just to reset state.
+  if (active) {
+    // Native abort posts its end on Android's main thread. A retry must wait
+    // for it before installing the next session's result/error listeners.
+    recognitionDrain = new Promise<void>(resolve => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true; clearTimeout(timer); subscription.remove(); resolve();
+      };
+      const subscription = ExpoSpeechRecognitionModule.addListener('end', finish);
+      const timer = setTimeout(finish, 1500);
+      ExpoSpeechRecognitionModule.abort();
+    });
+  }
 }
 
 export async function listenOnce(options: ListenOptions = {}) {
-  if (options.prompt) {
-    await speak(options.prompt);
-  }
-
+  if (conversationIsActive()) throw new Error('Anny ya está escuchando. Hablá directamente en la conversación.');
+  stopListening();
+  const generation = listeningGeneration;
+  await recognitionDrain;
+  await stopSpeaking();
+  if (generation !== listeningGeneration) throw new Error('Escucha cancelada.');
   await requestVoicePermissions({ showSettingsAlert: true });
+  if (generation !== listeningGeneration) throw new Error('Escucha cancelada.');
 
   if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
     throw new Error('El reconocimiento de voz no está disponible en este dispositivo.');
   }
+  if (options.prompt) await speak(options.prompt, { remember: false });
+  if (generation !== listeningGeneration) throw new Error('Escucha cancelada.');
 
   return new Promise<string>((resolve, reject) => {
+    listening = true;
     let settled = false;
+    let started = false;
     let bestTranscript = '';
     const timeout = setTimeout(() => {
       finish(() => reject(new Error('No escuché ninguna respuesta. Probá de nuevo.')));
@@ -110,6 +167,7 @@ export async function listenOnce(options: ListenOptions = {}) {
     }, options.timeoutMs ?? 12000);
 
     const subscriptions = [
+      ExpoSpeechRecognitionModule.addListener('start', () => { started = true; }),
       ExpoSpeechRecognitionModule.addListener('result', (event) => {
         const transcript = event.results[0]?.transcript?.trim();
 
@@ -126,16 +184,18 @@ export async function listenOnce(options: ListenOptions = {}) {
       }),
       ExpoSpeechRecognitionModule.addListener('error', (event) => {
         if (event.error === 'aborted') {
-          finish(() => reject(new Error('Escucha cancelada.')));
+          if (!started) return; // A previous recognizer is still finishing abort().
+          finish(() => reject(new Error('Se interrumpió el micrófono. Tocá para volver a escuchar.')));
           return;
         }
 
         finish(() => reject(new Error(getSpeechErrorMessage(event.error))));
       }),
       ExpoSpeechRecognitionModule.addListener('end', () => {
+        if (!started && !bestTranscript) return; // Not this session's end.
         if (bestTranscript) {
           finish(() => resolve(bestTranscript));
-        }
+        } else finish(() => reject(new Error('No escuché ninguna respuesta. Probá de nuevo.')));
       }),
     ];
 
@@ -145,18 +205,21 @@ export async function listenOnce(options: ListenOptions = {}) {
       }
 
       settled = true;
+      listening = false;
+      cancelActiveListen = undefined;
       clearTimeout(timeout);
       subscriptions.forEach((subscription) => subscription.remove());
       callback();
     }
 
-    ExpoSpeechRecognitionModule.start({
+    cancelActiveListen = () => finish(() => reject(new Error('Escucha cancelada.')));
+    try { ExpoSpeechRecognitionModule.start({
       lang: 'es-AR',
       interimResults: true,
       continuous: false,
       contextualStrings: options.contextualStrings,
       addsPunctuation: false,
-    });
+    }); } catch (error) { finish(() => reject(error)); }
   });
 }
 

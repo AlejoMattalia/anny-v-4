@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { clearAuthSession, type AuthUser } from '@/lib/auth';
 import { changeProfilePassword, getProfileUser, updateProfileUser } from '@/lib/profile';
 import { speak } from '@/lib/voice';
+import { useVoiceActions } from '@/context/voice-commands-context';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 type ProfileMenuItem = {
@@ -31,7 +32,7 @@ type ProfileMenuItem = {
 const accountItems: ProfileMenuItem[] = [
   { icon: 'account-outline', label: 'Información personal', action: 'edit' },
   { icon: 'bluetooth', label: 'Dispositivos', route: '/bluetooth-devices' as Href },
-  { icon: 'microphone-message', label: 'Comandos', soon: true },
+  { icon: 'microphone-message', label: 'Comandos', route: '/commands' as Href },
   { icon: 'wallet-outline', label: 'Mi billetera', soon: true },
   { icon: 'bell-outline', label: 'Notificaciones', route: '/notifications' as Href },
 ] satisfies ProfileMenuItem[];
@@ -52,6 +53,8 @@ function getStringValue(user: AuthUser | null, key: string) {
 }
 
 export default function ProfileScreen() {
+  const params = useLocalSearchParams<{ edit?: string; voiceRequest?: string }>();
+  const editedRequest = useRef<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -96,6 +99,16 @@ export default function ProfileScreen() {
   function selectSoon(label: string) {
     void speak(`${label}. Próximamente.`);
   }
+  useEffect(() => {
+    const request = params.voiceRequest ?? 'edit';
+    if (!isLoading && params.edit === '1' && editedRequest.current !== request) {
+      editedRequest.current = request;
+      openEdit();
+    }
+    // openEdit uses the loaded profile; the request is consumed exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, params.edit, params.voiceRequest]);
+  useVoiceActions({ personal: openEdit });
 
   async function saveProfile() {
     const trimmedName = name.trim();

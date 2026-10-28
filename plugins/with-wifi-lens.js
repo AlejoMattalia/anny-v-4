@@ -1,10 +1,17 @@
 /* global __dirname */
-const { withAndroidManifest, withDangerousMod, withMainApplication } = require('expo/config-plugins');
+const { withAndroidManifest, withAppBuildGradle, withDangerousMod, withMainApplication } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
 // Keep the v3 native transport in source control across Expo prebuilds.
 module.exports = function withWifiLens(config) {
+  config = withAppBuildGradle(config, (mod) => {
+    const dependency = 'implementation("com.voximplant:voximplant-sdk:2.45.0")';
+    if (!mod.modResults.contents.includes(dependency)) {
+      mod.modResults.contents = mod.modResults.contents.replace('dependencies {', `dependencies {\n    ${dependency}`);
+    }
+    return mod;
+  });
   config = withDangerousMod(config, ['android', async (mod) => {
     const target = path.join(mod.modRequest.platformProjectRoot, 'app/src/main/java/com/anonymous/annyv4/lenswifi');
     fs.mkdirSync(target, { recursive: true });

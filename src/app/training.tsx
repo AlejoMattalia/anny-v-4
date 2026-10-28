@@ -13,11 +13,21 @@ import {
   type TrainingActivity,
   type TrainingModule,
 } from '@/lib/training-data';
+import { useAppControl } from '@/context/useAppControl';
 import { speak } from '@/lib/voice';
 
 export default function TrainingScreen() {
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
 
+  useAppControl({ modules: trainingModules.map((module, index) => ({ index: index + 1, id: module.idModule, title: module.titleModule })), selectedModuleId }, {
+    training_step: args => {
+      const module = trainingModules[(args.index ?? 0) - 1];
+      if (!module) throw new Error('Elegí un módulo de la lista.');
+      setSelectedModuleId(module.idModule);
+      const activities = trainingActivities.filter(item => item.idModule === module.idModule);
+      return { ok: true, title: module.titleModule, activities: activities.map(item => ({ title: item.titleActivity, description: item.descriptionActivity, steps: trainingSteps.filter(step => step.idActivity === item.idActivity).map(step => step.descriptionStep) })) };
+    },
+  });
   function selectModule(module: TrainingModule) {
     setSelectedModuleId((currentModuleId) => {
       const nextModuleId = currentModuleId === module.idModule ? null : module.idModule;

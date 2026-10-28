@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   CurrentLocation,
-  getCurrentLocation,
+  getExplorationLocation,
   reverseGeocodeLocation,
 } from '@/lib/current-location';
 import { speak } from '@/lib/voice';
@@ -32,9 +32,7 @@ export default function WhereAmIScreen() {
     void speak('Buscando tu ubicación actual.');
 
     try {
-      const current = await getCurrentLocation({
-        allowCached: !forceRefresh,
-      });
+      const current = await getExplorationLocation(forceRefresh);
       if (requestId !== locationRequestId.current) return;
       setLocation(current);
       setAddress('Buscando dirección…');

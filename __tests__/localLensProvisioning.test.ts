@@ -1,5 +1,6 @@
 import {Buffer} from 'buffer';
 import type {Device} from 'react-native-ble-plx';
+import {Platform} from 'react-native';
 import {discoverAndConfigureLens, validateLensWifi} from '../src/services/LensAutoProvisioning';
 import {WifiLensConnectionManager} from '../src/services/WifiLensConnectionManager';
 
@@ -9,10 +10,13 @@ const mockWrite = jest.fn(async (_service, _characteristic, value) => { mockRequ
 const mockCancel = jest.fn().mockResolvedValue(undefined);
 const mockStartScan = jest.fn();
 const mockStopScan = jest.fn();
+const mockCancelDevice = jest.fn().mockResolvedValue(undefined);
 const mockDevice = {
   id: 'test-device',
+  serviceUUIDs: ['e7a20001-8f21-4c7d-9b32-1c9a52f00100'],
   connect: jest.fn(async (): Promise<Device> => mockDevice as unknown as Device),
   discoverAllServicesAndCharacteristics: jest.fn().mockResolvedValue(undefined),
+  requestMTU: jest.fn(async (): Promise<Device> => mockDevice as unknown as Device),
   readCharacteristicForService: jest.fn(async (_service, characteristic) => {
     if (characteristic.includes('20004')) { return {value: Buffer.from('internal-device-token').toString('base64')}; }
     if (!mockWrite.mock.calls.length) return {value: Buffer.from(JSON.stringify({multi: false})).toString('base64')};
@@ -23,14 +27,14 @@ const mockDevice = {
   cancelConnection: mockCancel,
 };
 jest.mock('react-native-ble-plx', () => ({
-  State: {PoweredOn: 'on'},
-  BleManager: jest.fn(() => ({state: async () => 'on', startDeviceScan: mockStartScan, stopDeviceScan: mockStopScan})),
+  State: {PoweredOn: 'on'}, ScanMode: {LowLatency: 2},
+  BleManager: jest.fn(() => ({state: async () => 'on', startDeviceScan: mockStartScan, stopDeviceScan: mockStopScan, cancelDeviceConnection: mockCancelDevice})),
 }));
 beforeEach(() => {
   jest.useFakeTimers(); jest.clearAllMocks();
   mockStartScan.mockReset().mockImplementation((_filter: unknown, _options: unknown, callback: Function) => callback(null, mockDevice));
 });
-afterEach(() => jest.useRealTimers());
+afterEach(() => {Platform.OS = 'ios'; jest.useRealTimers();});
 
 it('ignores a previous successful request and starts only after this network is saved', async () => {
   mockStates = [
@@ -128,5 +132,64 @@ it('reports a Bluetooth scanner error immediately instead of silently retrying i
     .rejects.toThrow('Revisá Bluetooth y los permisos');
   await jest.advanceTimersByTimeAsync(60000);
   expect(mockStartScan).toHaveBeenCalledTimes(1);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+it('handles a rejected native scan promise and uses foreground scan mode', async () => {
+  mockStartScan.mockImplementationOnce(() => Promise.reject(new Error('Native scanner rejected')));
+  await expect(discoverAndConfigureLens('My WiFi', 'test-password', jest.fn(), new AbortController().signal))
+    .rejects.toThrow('Revisá Bluetooth y los permisos');
+  expect(mockStartScan).toHaveBeenCalledWith(expect.any(Array), {scanMode: 2}, expect.any(Function));
+  expect(mockStopScan).toHaveBeenCalledTimes(1);
+  expect(mockWrite).not.toHaveBeenCalled();
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+it.each([undefined, 'test-device'])('finds only the intended lens without Android hardware scan filters (saved=%s)', async knownId => {
+  Platform.OS = 'android';
+  mockStates = [{result: 'saved', connected: true, ssid: 'My WiFi', ip: '192.168.1.20', ap: 'Lentes-123ABC'}];
+  mockStartScan.mockImplementationOnce((filter, _options, callback) => {
+    expect(filter).toBeNull();
+    callback(null, {id: 'unrelated', serviceUUIDs: []});
+    if (knownId) callback(null, {...mockDevice, id: 'another-lens'});
+    callback(null, knownId ? {...mockDevice, serviceUUIDs: []} : mockDevice);
+  });
+  const pending = discoverAndConfigureLens('My WiFi', 'test-password', jest.fn(), new AbortController().signal, knownId);
+  await jest.advanceTimersByTimeAsync(1500);
+  await expect(pending).resolves.toMatchObject({id: 'test-device'});
+  expect(mockDevice.connect).toHaveBeenCalledTimes(1);
+});
+
+it('reports a native stop failure instead of hanging or starting a concurrent scan', async () => {
+  mockStopScan.mockImplementationOnce(() => Promise.reject(new Error('Scan could not stop')));
+  await expect(discoverAndConfigureLens('My WiFi', 'test-password', jest.fn(), new AbortController().signal))
+    .rejects.toThrow('Scan could not stop');
+  expect(mockStartScan).toHaveBeenCalledTimes(1);
+  expect(mockDevice.connect).not.toHaveBeenCalled();
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+it('times out a native service discovery that never returns and releases Bluetooth', async () => {
+  mockDevice.discoverAllServicesAndCharacteristics.mockImplementationOnce(() => new Promise(() => {}));
+  const result = expect(discoverAndConfigureLens('My WiFi', 'test-password', jest.fn(), new AbortController().signal))
+    .rejects.toThrow('servicios Bluetooth');
+  await jest.advanceTimersByTimeAsync(15000);
+  await result;
+  expect(mockCancel).toHaveBeenCalledTimes(1);
+  expect(mockWrite).not.toHaveBeenCalled();
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+it('cancels an unresponsive Bluetooth operation without waiting for its result', async () => {
+  mockDevice.discoverAllServicesAndCharacteristics.mockImplementationOnce(() => new Promise(() => {}));
+  const controller = new AbortController();
+  const result = expect(discoverAndConfigureLens('My WiFi', 'test-password', jest.fn(), controller.signal))
+    .rejects.toThrow('Conexión cancelada');
+  await jest.advanceTimersByTimeAsync(1);
+  controller.abort();
+  await result;
+  expect(mockCancelDevice).toHaveBeenCalledWith('test-device');
+  expect(mockCancel).toHaveBeenCalledTimes(1);
+  expect(mockWrite).not.toHaveBeenCalled();
   expect(jest.getTimerCount()).toBe(0);
 });

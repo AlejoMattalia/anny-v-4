@@ -7,6 +7,7 @@ declare module 'react-native-voximplant' {
     off(event: string, listener?: (event: VoxEvent) => void): void;
   }
   export interface Call {
+    callId: string;
     on(event: string, listener: (event: VoxEvent) => void): void;
     off(event: string, listener?: (event: VoxEvent) => void): void;
     getEndpoints(): Endpoint[];
@@ -15,6 +16,7 @@ declare module 'react-native-voximplant' {
     decline(): void;
     sendMessage(message: string): void;
     sendAudio(enabled: boolean): void;
+    sendVideo(enabled: boolean): Promise<void>;
   }
   export interface VoxEvent { call: Call; endpoint: Endpoint; videoStream: { id: string }; code: number; text: string; }
   export const Voximplant: {
@@ -34,7 +36,14 @@ declare module 'react-native-voximplant' {
     EndpointEvents: Record<string, string>;
     Hardware: {
       CameraManager: { getInstance(): { switchCamera(camera: string): void } };
-      AudioDeviceManager: { getInstance(): { selectAudioDevice(device: string): void } };
+      AudioDeviceManager: { getInstance(): {
+        getAudioDevices(): Promise<string[]>;
+        getActiveDevice(): Promise<string>;
+        selectAudioDevice(device: string): void;
+        on(event: string, listener: (event: { newDeviceList: string[] }) => void): void;
+        off(event: string, listener: (event: { newDeviceList: string[] }) => void): void;
+      } };
+      AudioDeviceEvents: Record<string, string>;
       AudioDevice: Record<string, string>;
     };
     RenderScaleType: { SCALE_FIT: string };

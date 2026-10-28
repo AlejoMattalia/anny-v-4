@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { loadSettings, saveSettings } from '@/lib/settings-storage';
 import { checkVoicePermissions, requestVoicePermissions, speak } from '@/lib/voice';
+import { useAppControl } from '@/context/useAppControl';
 import { useCompass } from '@/hooks/use-compass';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -53,6 +54,12 @@ export default function SettingsScreen() {
   const [simulationTrackWidth, setSimulationTrackWidth] = useState(1);
 
   const heading = useCompass(compassActive);
+  useAppControl({ compassActive, voiceRate, simulationSpeed, scanInterval, micPermission, contactsPermission }, {
+    update_setting: async () => {
+      const settings = await loadSettings(); setCompassActive(settings.compassActive); setVoiceRate(settings.voiceRate); setSimulationSpeed(settings.simulationSpeed); setScanInterval(settings.scanInterval);
+      return { ok: true, settings };
+    },
+  });
 
   useEffect(() => {
     async function loadPermissions() {

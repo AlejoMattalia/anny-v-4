@@ -1,12 +1,15 @@
 import { usePathname } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
+import { conversationIsActive } from '@/services/ConversationRuntime';
 import { speak } from '@/lib/voice';
 import { useWifiLens } from '@/context/wifi-lens-context';
 
 const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
+  '/commands': 'Comandos de voz. Tocá un comando para escuchar qué hace. Para usarlo, tocá el micrófono o el botón de tus lentes y decilo.',
+  '/qr-scanner': 'Escáner de códigos. Apuntá al código QR o de barras. Podés usar la cámara del celular o la de los lentes.',
   '/home':
-    'Inicio de Anny. Podés elegir Viajar, Explorar, Ayuda o Configuración. También podés abrir el menú para acceder a tu perfil, tutorial y términos de uso.',
+    'Inicio de Anny. Podés elegir Viajar, Explorar, Ayuda o Configuración. Para usar comandos de voz, tocá el micrófono de la barra inferior o el botón de tus lentes. Decí comandos para conocer las opciones. El menú permite acceder a tu perfil, tutorial y términos de uso.',
   '/help':
     'Sección Ayuda. Podés pedir asistencia remota a un tutor, escanear texto, imágenes y billetes, o abrir el streaming en tiempo real del lente o del celular.',
   '/remote-assistance':
@@ -68,7 +71,7 @@ export function ScreenVoiceAnnouncer() {
     if (connectionDialogOpen) return;
     const announcement = SCREEN_ANNOUNCEMENTS[pathname];
 
-    if (!announcement) {
+    if (!announcement || conversationIsActive()) {
       return;
     }
 

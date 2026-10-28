@@ -152,6 +152,7 @@ class LocalLensStreamView(context: ThemedReactContext) : FrameLayout(context) {
                     // Hardware Canvas owns bitmap references until GPU work ends;
                     // do not recycle a bitmap that has been submitted to it.
                     if (!image.display(bitmap) { generation == token }) continue
+                    LocalLensCallVideo.offer(bitmap)
                     val now = SystemClock.elapsedRealtime()
                     maxDrawMs = maxOf(maxDrawMs, now - drawAt)
                     if (displayStatsAt == 0L) displayStatsAt = now

@@ -1,6 +1,7 @@
 import {Buffer} from 'buffer';
 import {PermissionsAndroid, Platform} from 'react-native';
-import {BleManager, Device, State} from 'react-native-ble-plx';
+import {BleManager, Device, ScanMode, State} from 'react-native-ble-plx';
+import {LensDiscoveryError, waitForLensOperation} from './lensOperation';
 
 const SERVICE = 'e7a20001-8f21-4c7d-9b32-1c9a52f00100';
 const RX = 'e7a20002-8f21-4c7d-9b32-1c9a52f00100';
@@ -43,14 +44,15 @@ export async function discoverAndConfigureLens(
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
           ]
         : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
-    const granted = await PermissionsAndroid.requestMultiple(permissions);
+    const granted = await waitForLensOperation(() => PermissionsAndroid.requestMultiple(permissions), signal, 60000,
+      'La solicitud de permisos Bluetooth tardó demasiado. Volvé a intentar.');
     if (
       permissions.some(
         permission =>
           granted[permission] !== PermissionsAndroid.RESULTS.GRANTED,
       )
     ) {
-      throw new Error(
+      throw new LensDiscoveryError(
         'Permití dispositivos cercanos para encontrar tus lentes.',
       );
     }
@@ -60,8 +62,9 @@ export async function discoverAndConfigureLens(
     manager = new BleManager();
   }
   const ble = manager;
-  if ((await ble.state()) !== State.PoweredOn) {
-    throw new Error(
+  if ((await waitForLensOperation(() => ble.state(), signal, 5000,
+    'Bluetooth no respondió. Apagalo, volvé a activarlo y reintentá.')) !== State.PoweredOn) {
+    throw new LensDiscoveryError(
       'Activá Bluetooth para que Anny encuentre los lentes. El video se transmite por Wi-Fi.',
     );
   }
@@ -77,37 +80,49 @@ export async function discoverAndConfigureLens(
         }
         done = true;
         clearTimeout(timer);
-        ble.stopDeviceScan();
         signal.removeEventListener('abort', cancel);
-        if (error) {reject(error);}
-        else {resolve(found ?? null);}
+        // stopDeviceScan is asynchronous in current ble-plx. Finish stopping
+        // before a retry starts, and never let a rejected stop hang the owner.
+        void waitForLensOperation(() => Promise.resolve(ble.stopDeviceScan()), undefined, 3000,
+          'No se pudo detener la búsqueda Bluetooth.').then(() => {
+          if (error) reject(error);
+          else resolve(found ?? null);
+        }, stopError => reject(error ?? new LensDiscoveryError(stopError instanceof Error
+          ? stopError.message : 'No se pudo detener la búsqueda Bluetooth.')));
       };
       const cancel = () => finish(undefined, new Error('Conexión cancelada.'));
       const timer = setTimeout(() => finish(), 20000);
       signal.addEventListener('abort', cancel);
       if (signal.aborted) {cancel(); return;}
-      ble.startDeviceScan([SERVICE], null, (error, found) => {
-        if (error) {
-          finish(
-            undefined,
-            new Error(
-              'No se pudo buscar el lente. Revisá Bluetooth y los permisos.',
-            ),
-          );
-          return;
-        }
-        if (found && (!knownId || found.id === knownId)) {
-          finish(found);
-        }
-      });
+      const scanFailed = () => finish(undefined, new LensDiscoveryError(
+        'No se pudo buscar el lente. Revisá Bluetooth y los permisos.',
+      ));
+      // Samsung can exhaust hardware filter slots while other apps scan.
+      // Filter in JS on Android, keeping the saved device identity or the
+      // provisioning service for first pairing. GATT is verified before writing.
+      try {
+        void Promise.resolve(ble.startDeviceScan(Platform.OS === 'android' ? null : [SERVICE], {scanMode: ScanMode.LowLatency}, (error, found) => {
+          if (done) return;
+          if (error) {
+            scanFailed();
+            return;
+          }
+          if (!found) return;
+          const matches = knownId ? found.id.toLowerCase() === knownId.toLowerCase()
+            : found.serviceUUIDs?.some(uuid => uuid.toLowerCase() === SERVICE);
+          if (matches) {finish(found);}
+        })).catch(scanFailed);
+      } catch {scanFailed();}
     });
   }
   check();
   if (!device) {
-    throw new Error('No se encontraron los lentes. Encendelos, acercalos al celular y tocá Reintentar.');
+    throw new LensDiscoveryError('No se encontraron los lentes por Bluetooth. Acercalos al celular y tocá Reintentar.');
   }
   const discoveredDevice = device;
   let connected: Device | null = null;
+  const step = <T>(work: () => Promise<T>, message: string, timeout = 15000) =>
+    waitForLensOperation(work, signal, timeout, message);
   const cancel = () => {
     void ble.cancelDeviceConnection(discoveredDevice.id).catch(() => {});
   };
@@ -115,22 +130,24 @@ export async function discoverAndConfigureLens(
   try {
     check();
     onProgress('Conectando con tus lentes…');
-    connected = await discoveredDevice.connect({timeout: 15000});
-    await connected.discoverAllServicesAndCharacteristics();
+    connected = await step(() => discoveredDevice.connect({timeout: 15000}), 'El lente no respondió a la conexión Bluetooth.');
+    const link = connected;
+    await step(() => link.discoverAllServicesAndCharacteristics(), 'El lente no respondió al consultar sus servicios Bluetooth.');
     if (Platform.OS === 'android') {
-      connected = await connected.requestMTU(247);
+      connected = await step(() => link.requestMTU(247), 'El lente no respondió al preparar Bluetooth.', 10000);
     }
     // Encrypted GATT performs automatic system pairing. No device code is shown or entered in Anny.
-    const access = await connected.readCharacteristicForService(
+    const access = await step(() => connected!.readCharacteristicForService(
       SERVICE,
       ACCESS,
-    );
+    ), 'El lente no respondió a la vinculación Bluetooth.');
     if (!access.value) {
       throw new Error('Los lentes no respondieron. Volvé a intentar.');
     }
     const credential = Buffer.from(access.value, 'base64').toString('utf8');
     // New lenses advertise typed credentials; old firmware keeps its packet.
-    const capability = await connected.readCharacteristicForService(SERVICE, TX);
+    const capability = await step(() => connected!.readCharacteristicForService(SERVICE, TX),
+      'El lente no respondió al consultar la conexión.');
     const multi = capability.value
       ? JSON.parse(Buffer.from(capability.value, 'base64').toString('utf8')).multi === 1
       : false;
@@ -145,11 +162,11 @@ export async function discoverAndConfigureLens(
     name.copy(packet, offset);
     pass.copy(packet, offset + name.length);
     check();
-    await connected.writeCharacteristicWithResponseForService(
+    await step(() => connected!.writeCharacteristicWithResponseForService(
       SERVICE,
       RX,
       packet.toString('base64'),
-    );
+    ), 'El lente no confirmó la recepción de la red.');
     packet.fill(0);
     pass.fill(0);
     onProgress('Los lentes están conectándose a tu Wi-Fi…');
@@ -157,7 +174,9 @@ export async function discoverAndConfigureLens(
     while (Date.now() < deadline) {
       check();
       await sleep(1200);
-      const value = await connected.readCharacteristicForService(SERVICE, TX);
+      check();
+      const value = await step(() => connected!.readCharacteristicForService(SERVICE, TX),
+        'El lente dejó de responder al consultar su conexión.', Math.max(1, Math.min(15000, deadline - Date.now())));
       if (!value.value) {
         continue;
       }
@@ -192,8 +211,7 @@ export async function discoverAndConfigureLens(
     throw new Error('Los lentes no confirmaron la conexión. Volvé a intentar.');
   } finally {
     signal.removeEventListener('abort', cancel);
-    if (connected) {
-      await connected.cancelConnection().catch(() => {});
-    }
+    await waitForLensOperation(() => connected ? connected.cancelConnection() : ble.cancelDeviceConnection(discoveredDevice.id),
+      undefined, 3000, 'No se pudo cerrar Bluetooth.').catch(() => {});
   }
 }

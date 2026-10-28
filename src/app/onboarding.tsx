@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { appApiUrl, getOnboardingSteps, type OnboardingStep } from '@/lib/api';
 import { markOnboardingSeen } from '@/lib/onboarding-storage';
+import { useAppControl } from '@/context/useAppControl';
 import { speak } from '@/lib/voice';
 
 export default function OnboardingScreen() {
@@ -46,6 +47,13 @@ export default function OnboardingScreen() {
   const content = activeStep?.content?.es ?? '';
   const canGoBack = activeIndex > 0;
   const canGoNext = activeIndex < steps.length - 1;
+  useAppControl({ step: activeIndex + 1, total: steps.length, content, loading, error }, {
+    tutorial_step: args => {
+      const index = (args.index ?? 0) - 1;
+      if (!steps[index]) throw new Error('Elegí un paso disponible del tutorial.');
+      setActiveIndex(index); return { ok: true, step: index + 1, total: steps.length, content: steps[index].content?.es || '' };
+    },
+  });
 
   useEffect(() => {
     if (loading || error || steps.length === 0) {

@@ -4,6 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 fun main() {
+    testCallVideoFrames()
     val clean = LocalLensVideoFrame(byteArrayOf(1), false)
     val newer = LocalLensVideoFrame(byteArrayOf(2), false)
     val partial = LocalLensVideoFrame(byteArrayOf(3), true, intactRatio = 0.95f)
@@ -104,5 +105,19 @@ fun main() {
     // Recovery never exceeds the sender's nominal 20 FPS.
     repeat(40) { slower.offer(paced, 1050L + it * 50) }
     check(slower.poll(3000) != null && slower.waitMs(3000) in 50L..75L)
+    // A decoder resuming after a scheduling pause must skip stale images,
+    // while keeping enough recent frames to resume evenly, without a burst.
+    val delayed = LocalLensFrameQueue()
+    val timeline = (0..4).map { paced.copy(jpeg = byteArrayOf(it.toByte())) }
+    timeline.take(4).forEachIndexed { index, frame -> delayed.offer(frame, index * 50L) }
+    check(delayed.poll(200) === timeline[1]) // Skip the 200-ms-old image.
+    check(delayed.lastAgeMs == 150L)
+    delayed.offer(timeline[4], 200)
+    check(delayed.poll(201) == null) // Do not catch up by displaying a burst.
+    check(delayed.poll(250) === timeline[2])
+    check(delayed.lastAgeMs <= 150L)
+    check(delayed.poll(500) == null) // No stale picture after a longer outage.
+    delayed.offer(paced, 501)
+    check(delayed.poll(501) === paced) // Resume without another startup buffer.
     println("Frame selection, partial fallback, FEC, feedback and bounded hotspot playout passed")
 }

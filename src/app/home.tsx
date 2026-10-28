@@ -1,13 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Animated, Dimensions, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { WifiLensConnectionCard } from '@/components/wifi-lens-connection-card';
 import { clearAuthSession } from '@/lib/auth';
 import { useAssistance } from '@/context/assistance-context';
+import { useVoiceActions, useVoiceCommands } from '@/context/voice-commands-context';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -18,6 +19,7 @@ const drawerItems = [
   { icon: 'video-account', label: 'Asistencia remota', route: '/remote-assistance' },
   { icon: 'access-point', label: 'Dispositivos', route: '/bluetooth-devices' },
   { icon: 'cog-outline', label: 'Configuraciones', route: '/settings' },
+  { icon: 'microphone', label: 'Comandos de voz', route: '/commands' },
   { icon: 'book-open-page-variant-outline', label: 'Tutorial', route: '/onboarding' },
   { icon: 'file-document-outline', label: 'Términos de uso', route: '/terms' },
 ] satisfies readonly { icon: MaterialIconName; label: string; route?: string }[];
@@ -75,6 +77,8 @@ function SectionIcon({ name }: { name: string }) {
 
 export default function HomeScreen() {
   const assistance = useAssistance();
+  const voice = useVoiceCommands();
+  const params = useLocalSearchParams<{ menu?: string; voiceRequest?: string }>();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerProgress] = useState(() => new Animated.Value(0));
   const drawerTranslateX = drawerProgress.interpolate({
@@ -107,6 +111,12 @@ export default function HomeScreen() {
       }
     });
   }, [drawerProgress]);
+  useEffect(() => {
+    if (params.menu !== '1') return;
+    const timer = setTimeout(openDrawer, 0);
+    return () => clearTimeout(timer);
+  }, [params.menu, params.voiceRequest, openDrawer]);
+  useVoiceActions({ more: openDrawer });
 
   const edgeSwipeResponder = useMemo(
     () =>
@@ -232,10 +242,11 @@ export default function HomeScreen() {
           </View>
 
           <Pressable
-            accessibilityLabel="Hablar con Anny. Próximamente"
-            accessibilityState={{ disabled: true }}
-            disabled
-            style={[styles.voiceBar, styles.voiceBarDisabled]}>
+            accessibilityLabel="Hablar con Anny"
+            accessibilityRole="button"
+            accessibilityHint="Inicia una conversación de voz para hacer preguntas y usar las funciones de Anny"
+            onPress={() => router.push('/conversation' as Href)}
+            style={styles.voiceBar}>
             <MaterialCommunityIcons color="#FFFFFF" name="microphone" size={31} style={styles.voiceIcon} />
             <View style={styles.voiceTextWrap}>
               <Text style={styles.voiceTitle}>Hablar con Anny</Text>
@@ -254,6 +265,17 @@ export default function HomeScreen() {
             style={styles.tabItem}>
             <MaterialCommunityIcons color="#828595" name="school-outline" size={24} />
             <Text style={styles.tabText}>Capacitaciones</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={voice.listening ? 'Cancelar escucha de comandos' : 'Comandos de voz'}
+            accessibilityHint="Activa el micrófono para decir un comando"
+            accessibilityState={{ selected: voice.listening }}
+            onPress={() => voice.listening ? voice.cancel() : void voice.listen()}
+            style={styles.tabItem}>
+            <View style={[styles.commandMic, voice.listening && styles.commandMicListening]}>
+              <MaterialCommunityIcons color="#FFFFFF" name={voice.listening ? 'microphone-off' : 'microphone'} size={25} />
+            </View>
           </Pressable>
           <Pressable
             accessibilityLabel="Contactos"
@@ -677,6 +699,17 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     color: '#3C1642',
+  },
+  commandMic: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3C1642',
+  },
+  commandMicListening: {
+    backgroundColor: '#B61D42',
   },
   drawerLayer: {
     position: 'absolute',

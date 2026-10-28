@@ -1,5 +1,6 @@
 import type {LensPairing, LensStatus} from './LocalWifiLens';
 import type {NetworkType, SavedNetwork} from '../types/savedNetwork';
+import {LensDiscoveryError, waitForLensOperation} from './lensOperation';
 
 export type NearbyLensNetwork = {
   ssid: string;
@@ -316,23 +317,43 @@ export class WifiLensConnectionManager {
       .catch(() => {})
       .then(async () => {
         if (!current()) {return false;}
+        const attempt = async () => {
+          try {
+            return await work(controller.signal, current);
+          } catch (error) {
+            if (current() && error instanceof LensDiscoveryError) {this.recoveryArmed = false;}
+            const failure = error instanceof Error ? error.message : 'No se pudo cambiar de red.';
+            if (current() && await this.recoverReachableConnection(controller.signal, current, failure)) {return false;}
+            if (current())
+              {this.update({
+                phase: 'disconnected',
+                ssid: '',
+                session: null,
+                target: '',
+                showDialog: manual,
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : 'No se pudo conectar con los lentes.',
+              });}
+            return false;
+          }
+        };
+        const task = attempt();
         try {
-          return await work(controller.signal, current);
+          // Bound the whole attempt, including bridge calls and all saved
+          // networks. Preserve serialization while normal cancellation drains.
+          return await waitForLensOperation(() => task, undefined, manual ? 180000 : 90000,
+            'La conexión con los lentes tardó demasiado. Revisá Bluetooth y tocá Conectar para reintentar.');
         } catch (error) {
-          const failure = error instanceof Error ? error.message : 'No se pudo cambiar de red.';
-          if (current() && await this.recoverReachableConnection(controller.signal, current, failure)) {return false;}
-          if (current())
-            {this.update({
-              phase: 'disconnected',
-              ssid: '',
-              session: null,
-              target: '',
-              showDialog: manual,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : 'No se pudo conectar con los lentes.',
-            });}
+          if (current()) {
+            controller.abort();
+            this.recoveryArmed = false;
+            // A pending network-list sync must not discard a link already confirmed.
+            if (this.state.phase !== 'connected') this.update({phase: 'disconnected', ssid: '', target: '', session: null,
+              showDialog: manual, message: error instanceof Error ? error.message : 'No se pudo conectar con los lentes.'});
+          }
+          await waitForLensOperation(() => task, undefined, 3500, 'Cerrando la conexión anterior.').catch(() => {});
           return false;
         } finally {
           if (revision === this.revision) {
@@ -442,7 +463,8 @@ export class WifiLensConnectionManager {
       const eligible = pinned ? [pinned] : saved;
       // A fresh scan on each foreground, but never reconfigure a valid link.
       const [scan, probe] = await Promise.allSettled([
-        mode === 'wifi' ? this.deps.scan() : Promise.resolve([]),
+        mode === 'wifi' ? waitForLensOperation(() => this.deps.scan(), signal, 12000,
+          'La búsqueda de redes tardó demasiado.') : Promise.resolve([]),
         pair && (!switching || !pair.networkType || pair.networkType === mode)
           ? this.deps.probe(pair, signal) : Promise.resolve(null),
       ]);
@@ -479,7 +501,8 @@ export class WifiLensConnectionManager {
       );
       // The phone's current LAN is the most likely reachable lens network.
       // A 5 GHz phone and a 2.4 GHz lens may share this same SSID/router.
-      const phoneSSID = mode === 'wifi' && this.deps.phoneSSID ? await this.deps.phoneSSID().catch(() => '') : '';
+      const phoneSSID = mode === 'wifi' && this.deps.phoneSSID ? await waitForLensOperation(
+        () => this.deps.phoneSSID!(), signal, 3000, 'No se pudo consultar la red del celular.').catch(() => '') : '';
       if (!current()) {return false;}
       // A temporary loss must not send the lens to a different phone's hotspot.
       const previousHotspot = mode === 'hotspot' && pair?.networkType === mode
@@ -500,6 +523,9 @@ export class WifiLensConnectionManager {
           if (await this.connectCandidate(pair, network, signal, current))
             {return true;}
         } catch (error) {
+          // Searching again for the same missing lens for every saved SSID can
+          // keep Home "connecting" for many minutes without any chance of progress.
+          if (error instanceof LensDiscoveryError) {throw error;}
           lastError = error;
         }
       }

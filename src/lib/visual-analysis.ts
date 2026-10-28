@@ -1,3 +1,5 @@
+import { prepareVisionUpload } from './vision-upload';
+
 export type VisualAnalysisMode =
   | 'describe_scene'
   | 'identify_currency'
@@ -29,7 +31,8 @@ export async function analyzeVisualImage(
   imageDataUrl: string,
   mode: VisualAnalysisMode,
 ) {
-  const match = imageDataUrl.match(/^data:(image\/(?:jpeg|png));base64,(.+)$/s);
+  const preparedImage = await prepareVisionUpload(imageDataUrl, 'scan');
+  const match = preparedImage.match(/^data:(image\/(?:jpeg|png));base64,(.+)$/s);
   if (!match) throw new Error('El formato de la imagen no es válido.');
 
   const contentType = match[1];

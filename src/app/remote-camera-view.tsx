@@ -11,7 +11,7 @@ import { createCameraViewSession, getRemoteCameras, type RemoteCamera, type Came
 import { PhoneLiveCamera } from '@/components/phone-live-camera';
 import { speak, stopSpeaking } from '@/lib/voice';
 
-type WebViewModule = typeof import('react-native-webview');
+type StreamModule = typeof import('@/components/remote-camera-stream');
 const WEBRTC_FRAME_CAPTURE_SCRIPT = `
   (function () {
     if (window.__annyFrameCaptureStarted) return true;
@@ -120,7 +120,7 @@ export default function RemoteCameraViewScreen() {
 
 function LensCameraView({ cameraId, cameraName }: { cameraId: string; cameraName: string }) {
   const [session, setSession] = useState<CameraViewSession | null>(null);
-  const [webViewModule, setWebViewModule] = useState<WebViewModule | null>(null);
+  const [streamModule, setStreamModule] = useState<StreamModule | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [description, setDescription] = useState('');
@@ -189,7 +189,7 @@ function LensCameraView({ cameraId, cameraName }: { cameraId: string; cameraName
     let active = true;
     mountedRef.current = true;
     if (UIManager.getViewManagerConfig('RNCWebView')) {
-      void import('react-native-webview').then((module) => active && setWebViewModule(module));
+      void import('@/components/remote-camera-stream').then((module) => active && setStreamModule(module));
     }
     async function connect() {
       if (!cameraId) {
@@ -215,24 +215,19 @@ function LensCameraView({ cameraId, cameraName }: { cameraId: string; cameraName
     };
   }, [cameraId]);
 
-  const StreamWebView = webViewModule?.WebView;
+  const CameraStream = streamModule?.default;
 
   return (
     <View style={styles.screen}>
       <StatusBar hidden />
-      {session && StreamWebView ? (
-        <StreamWebView
-          allowsInlineMediaPlayback
+      {session && CameraStream ? (
+        <CameraStream
+          key={cameraId}
           injectedJavaScript={WEBRTC_FRAME_CAPTURE_SCRIPT}
-          javaScriptEnabled
-          mediaPlaybackRequiresUserAction={false}
-          mixedContentMode="always"
           onError={() => setError('No se pudo mostrar el video.')}
           onHttpError={() => setError('El servidor rechazó la reproducción.')}
           onMessage={handleWebViewMessage}
-          originWhitelist={['http://*', 'https://*']}
-          scrollEnabled={false}
-          source={{ uri: session.streamUrl }}
+          streamUrl={session.streamUrl}
           style={styles.video}
         />
       ) : null}
@@ -244,7 +239,7 @@ function LensCameraView({ cameraId, cameraName }: { cameraId: string; cameraName
         </View>
       ) : null}
 
-      {!loading && !StreamWebView && !error ? (
+      {!loading && !CameraStream && !error ? (
         <View style={styles.centerState}>
           <MaterialCommunityIcons color="#FFB95C" name="cellphone-cog" size={58} />
           <Text style={styles.stateTitle}>Recompilación necesaria</Text>

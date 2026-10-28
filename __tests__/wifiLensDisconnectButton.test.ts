@@ -49,3 +49,11 @@ it('offers explicit reconnect after disconnecting and hides the disconnect actio
   await act(async () => {renderer.root.findByProps({accessibilityLabel: 'Conectar lentes'}).props.onPress();});
   expect(mockRefresh).toHaveBeenCalledWith(true, true);
 });
+
+it.each(['searching', 'connecting'])('can cancel the automatic %s operation directly from Home', async phase => {
+  mockConnection.phase = phase;
+  await act(async () => {renderer = create(React.createElement(WifiLensConnectionCard));});
+  await act(async () => {renderer.root.findByProps({accessibilityLabel: 'Cancelar conexión de lentes'}).props.onPress();});
+  expect(mockDisconnect).toHaveBeenCalledTimes(1);
+  expect(mockRefresh).not.toHaveBeenCalled();
+});

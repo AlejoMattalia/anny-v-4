@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import type { CameraView as ExpoCameraView } from 'expo-camera';
-import { router, useIsFocused } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -25,20 +25,29 @@ import {
   setRealtimeMode,
 } from '@/lib/realtime-streaming';
 import StreamingModePicker from '@/components/StreamingModePicker';
-import { STREAMING_MODES, parseStreamingModeCommand, type StreamingMode } from '@/services/StreamingModes';
+import { STREAMING_MODES, isStreamingMode, parseStreamingModeCommand, type StreamingMode } from '@/services/StreamingModes';
+import { parseVoiceCommand } from '@/services/VoiceCommands';
+import { interruptConversation } from '@/services/ConversationRuntime';
+import { useAppControl } from '@/context/useAppControl';
+import { useVoiceActions, useVoiceCommands } from '@/context/voice-commands-context';
 import WifiLensCamera, { type WifiLensCameraHandle } from '@/components/WifiLensCamera';
 import { useWifiLens } from '@/context/wifi-lens-context';
 import { useWifiLensButtons } from '@/context/useWifiLensButtons';
 import { listenOnce, speak, stopListening, stopSpeaking } from '@/lib/voice';
 import { canRunStreaming } from '@/services/StreamingActivity';
 import { streamingInterval } from '@/services/StreamingClock';
+import { StreamingNarration, streamingPictureSize } from '@/services/StreamingNarration';
+import { conversationDeadline } from '@/services/ConversationStartup';
 
 type CameraSource = 'glasses' | 'phone';
 type ExpoCameraModule = typeof import('expo-camera');
 
-const CAPTURE_INTERVAL_MS = 1500;
+const CAPTURE_INTERVAL_MS = 100;
 
 export default function RealtimeStreamingScreen() {
+  const params = useLocalSearchParams<{ streamingMode?: string; detection?: string; voiceRequest?: string }>();
+  const voiceCommands = useVoiceCommands();
+  const [detectionMode, setDetectionMode] = useState(params.detection === '1');
   const cameraRef = useRef<ExpoCameraView>(null);
   const wifiCameraRef = useRef<WifiLensCameraHandle>(null);
   const { wifiLensConnection } = useWifiLens();
@@ -47,6 +56,7 @@ export default function RealtimeStreamingScreen() {
   const streamingRef = useRef(true);
   const awaitingResponseRef = useRef(false);
   const speakingRef = useRef(false);
+  const narration = useRef<StreamingNarration | null>(null);
   const activeRef = useRef(false);
   const modeGeneration = useRef(0);
   const [activeMode, setActiveMode] = useState<StreamingMode>('viaje');
@@ -62,11 +72,13 @@ export default function RealtimeStreamingScreen() {
     wifiLensConnection.phase === 'connected' && wifiLensConnection.session ? 'glasses' : 'phone',
   );
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [pictureSizes, setPictureSizes] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(true);
   const [isPreparingGlasses, setIsPreparingGlasses] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const listeningSession = useRef(0);
   const [captureCount, setCaptureCount] = useState(0);
   const [description, setDescription] = useState('');
   const [statusMessage, setStatusMessage] = useState(
@@ -75,11 +87,17 @@ export default function RealtimeStreamingScreen() {
   const [streamError, setStreamError] = useState(
     realtimeAiUrl ? '' : 'Falta configurar el servidor de inteligencia artificial.',
   );
+  if (!narration.current) narration.current = new StreamingNarration({
+    read: (text, onStart) => speak(text, { priority: 'stream', onStart }),
+    current: generation => mountedRef.current && activeRef.current && streamingRef.current && generation === modeGeneration.current,
+    speaking: value => { speakingRef.current = value; },
+  });
 
   useEffect(() => {
     activeRef.current = canRunStreaming(focused, foreground, source, Platform.OS === 'android', backgroundReady);
     if (!activeRef.current) {
       modeGeneration.current++;
+      narration.current?.reset();
       awaitingResponseRef.current = false;
       speakingRef.current = false;
       stopListening();
@@ -105,8 +123,9 @@ export default function RealtimeStreamingScreen() {
     if (mountedRef.current) setIsAnalyzing(false);
   }, []);
 
-  async function changeStreamingMode(mode: StreamingMode) {
+  const changeStreamingMode = useCallback(async (mode: StreamingMode) => {
     const generation = ++modeGeneration.current;
+    narration.current?.reset(); interruptConversation();
     setRealtimeMode(mode);
     stopListening();
     setIsListening(false);
@@ -114,6 +133,7 @@ export default function RealtimeStreamingScreen() {
     setIsAnalyzing(false);
     setDescription('');
     setActiveMode(mode);
+    setDetectionMode(false);
     setStatusMessage(`Modo ${STREAMING_MODES[mode].label}`);
     speakingRef.current = true;
     try {
@@ -124,7 +144,14 @@ export default function RealtimeStreamingScreen() {
     } finally {
       if (generation === modeGeneration.current) speakingRef.current = false;
     }
-  }
+  }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isStreamingMode(params.streamingMode)) void changeStreamingMode(params.streamingMode);
+      if (params.detection === '1') { setDetectionMode(true); setSource('glasses'); }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [params.streamingMode, params.detection, params.voiceRequest, changeStreamingMode]);
 
   const prepareGlasses = useCallback(async () => {
     setIsPreparingGlasses(true);
@@ -132,24 +159,27 @@ export default function RealtimeStreamingScreen() {
     setCameraAttempt((attempt) => attempt + 1);
   }, []);
   const handleWifiReady = useCallback((ready: boolean) => setIsPreparingGlasses(!ready), []);
-  useWifiLensButtons(focused && source === 'glasses' ? wifiLensConnection.session : null, () => {
+  useWifiLensButtons(focused ? wifiLensConnection.session : null, () => {
     if (isListening) stopListening();
     else void askAnny();
   });
 
-  const captureAndSend = useCallback(async (query?: string) => {
+  const captureAndSend = useCallback(async (query?: string, options: { silent?: boolean; force?: boolean } = {}) => {
     if (
       !mountedRef.current ||
       !activeRef.current ||
-      !streamingRef.current ||
+      (!streamingRef.current && !options.force) ||
       awaitingResponseRef.current ||
-      speakingRef.current || modePickerOpen
+      (speakingRef.current && (!narration.current?.isSpeaking || Boolean(options.silent) || Boolean(query))) ||
+      (!options.silent && !query && !narration.current?.canCapture()) || modePickerOpen
     ) {
+      if (options.silent) throw new Error('Hay un análisis o una respuesta en curso. Intentá nuevamente.');
       return;
     }
 
     awaitingResponseRef.current = true;
     const generation = modeGeneration.current;
+    const capturedAt = Date.now();
     setIsAnalyzing(true);
     setStatusMessage(query ? `Buscando: “${query}”` : 'Analizando el entorno…');
 
@@ -162,9 +192,9 @@ export default function RealtimeStreamingScreen() {
         }
         const picture = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 0.8,
+          quality: activeMode === 'facultad' || activeMode === 'supermercado' ? 0.82 : 0.65,
           shutterSound: false,
-          skipProcessing: true,
+          skipProcessing: false,
         });
         if (!picture?.base64) throw new Error('No se pudo capturar la imagen.');
         image = `data:image/jpeg;base64,${picture.base64}`;
@@ -173,31 +203,29 @@ export default function RealtimeStreamingScreen() {
         image = `data:image/jpeg;base64,${await wifiCameraRef.current.capture()}`;
       }
 
-      if (!mountedRef.current || !activeRef.current || !streamingRef.current || generation !== modeGeneration.current) {
+      if (!mountedRef.current || !activeRef.current || (!streamingRef.current && !options.force) || generation !== modeGeneration.current) {
         finishAnalysis(generation);
         return;
       }
 
       setCaptureCount((count) => count + 1);
-      const text = await analyzeRealtimeImage(image, query);
+      const text = await analyzeRealtimeImage(image, query ?? (detectionMode ? 'Identificá los objetos visibles y su posición relativa en una frase breve, sin inventar distancias.' : undefined), { fast: !query });
       finishAnalysis(generation);
-      if (!mountedRef.current || !activeRef.current || !streamingRef.current || generation !== modeGeneration.current) return;
+      if (!mountedRef.current || !activeRef.current || (!streamingRef.current && !options.force) || generation !== modeGeneration.current) return;
       setDescription(text);
       setStatusMessage('Streaming en tiempo real');
       console.info(`[AnnyStreaming] analysis_completed source=${source} app_state=${AppState.currentState}`);
-      speakingRef.current = true;
-      try {
-        await speak(text);
-        console.info(`[AnnyStreaming] speech_finished app_state=${AppState.currentState}`);
-      } finally {
-        if (generation === modeGeneration.current) speakingRef.current = false;
-      }
+      const analysisMs = Date.now() - capturedAt;
+      console.info(`[AnnyStreaming] frame_ready capture_and_analysis_ms=${analysisMs} source=${source}`);
+      if (!options.silent) narration.current?.enqueue({ text, generation, capturedAt, analysisMs });
+      return text;
     } catch (error) {
       finishAnalysis(generation);
       if (!mountedRef.current || generation !== modeGeneration.current) return;
       setStatusMessage(getErrorMessage(error));
+      if (options.silent) throw error;
     }
-  }, [finishAnalysis, isCameraReady, source, modePickerOpen]);
+  }, [finishAnalysis, isCameraReady, source, modePickerOpen, detectionMode, activeMode]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -219,12 +247,12 @@ export default function RealtimeStreamingScreen() {
           ? 'Streaming en tiempo real'
           : 'No se pudo conectar con el servicio de visión',
       );
-      if (healthy) void speak('Conectado. Iniciando streaming en tiempo real.');
     }, 0);
 
     return () => {
       mountedRef.current = false;
       streamingRef.current = false;
+      narration.current?.reset();
       clearTimeout(healthTimer);
       pulseLoop.stop();
       stopListening();
@@ -238,7 +266,7 @@ export default function RealtimeStreamingScreen() {
         !isStreaming || !isConnected || isListening || modePickerOpen || streamError ||
         (source === 'phone' ? !isCameraReady : isPreparingGlasses)) return;
 
-    return streamingInterval(() => void captureAndSend(), CAPTURE_INTERVAL_MS, 900);
+    return streamingInterval(() => void captureAndSend(), CAPTURE_INTERVAL_MS, 100);
   }, [captureAndSend, focused, foreground, source, backgroundReady, isConnected, isListening, isStreaming, streamError, activeMode, modePickerOpen, isCameraReady, isPreparingGlasses]);
 
   useEffect(() => {
@@ -283,6 +311,7 @@ export default function RealtimeStreamingScreen() {
 
   async function toggleCameraSource() {
     modeGeneration.current++;
+    narration.current?.reset(); interruptConversation();
     awaitingResponseRef.current = false;
     speakingRef.current = false;
     stopListening();
@@ -305,7 +334,9 @@ export default function RealtimeStreamingScreen() {
   }
 
   async function askAnny() {
-    if (AppState.currentState !== 'active' || isListening || !isStreaming) return;
+    if (interruptConversation()) return;
+    if (AppState.currentState !== 'active' || isListening) return;
+    const session = ++listeningSession.current;
     const generation = modeGeneration.current;
     setIsListening(true);
     setStatusMessage('Te escucho…');
@@ -318,7 +349,13 @@ export default function RealtimeStreamingScreen() {
       if (!mountedRef.current || generation !== modeGeneration.current) return;
       const mode = parseStreamingModeCommand(query);
       if (mode) {
+        setStreaming(true);
         await changeStreamingMode(mode);
+        return;
+      }
+      const command = parseVoiceCommand(query);
+      if (/^(?:hola\s+)?(?:anny|any|ani|annie)\b/i.test(query.trim()) || command?.command.action === 'help' || command?.command.action === 'stop_detection') {
+        await voiceCommands.execute(query);
         return;
       }
       setDescription('');
@@ -329,25 +366,56 @@ export default function RealtimeStreamingScreen() {
       setStatusMessage(message);
       if (!/cancelada/i.test(message)) void speak(message);
     } finally {
-      if (mountedRef.current && generation === modeGeneration.current) setIsListening(false);
+      if (mountedRef.current && session === listeningSession.current) setIsListening(false);
     }
   }
 
-  function toggleStreaming() {
-    const nextStreaming = !isStreaming;
+  function setStreaming(nextStreaming: boolean) {
     streamingRef.current = nextStreaming;
     setIsStreaming(nextStreaming);
     modeGeneration.current++;
+    narration.current?.reset(); interruptConversation();
     awaitingResponseRef.current = false;
     speakingRef.current = false;
     setIsAnalyzing(false);
-    if (!nextStreaming && isListening) {
-      stopListening();
-      setIsListening(false);
-    }
+    stopListening();
+    setIsListening(false);
     setStatusMessage(nextStreaming ? 'Streaming en tiempo real' : 'Streaming pausado');
     void speak(nextStreaming ? 'Streaming reanudado.' : 'Streaming pausado.');
   }
+  function toggleStreaming() { setStreaming(!isStreaming); }
+  useVoiceActions({
+    streaming_mode: async request => {
+      if (request?.command.mode) { setStreaming(true); await changeStreamingMode(request.command.mode); }
+    },
+    streaming: () => setStreaming(true),
+    start_detection: () => {
+      if (wifiLensConnection.phase !== 'connected') { void speak('Conectá los lentes antes de iniciar la detección.'); return; }
+      setSource('glasses'); setDetectionMode(true); setStreaming(true);
+    },
+    stop_detection: () => { setDetectionMode(false); setStreaming(false); },
+    repeat: async () => { await stopSpeaking(); await captureAndSend(); },
+  });
+
+  useAppControl({ mode: activeMode, source, cameraReady: source === 'phone' ? isCameraReady : !isPreparingGlasses, analyzing: isAnalyzing,
+    streaming: isStreaming, connected: isConnected, description, error: streamError }, {
+    set_streaming: async args => {
+      if (args.mode && isStreamingMode(args.mode)) await changeStreamingMode(args.mode);
+      setStreaming(args.enabled !== false);
+      return { ok: true, streaming: args.enabled !== false, mode: args.mode || activeMode, source };
+    },
+    analyze_stream: async args => {
+      const text = await captureAndSend(args.query, { silent: true, force: true });
+      if (!text) throw new Error('No se pudo analizar una imagen actual.');
+      return { ok: true, text, source, mode: activeMode, capturedAt: new Date().toISOString() };
+    },
+    switch_camera: async args => {
+      if (args.camera !== 'phone' && args.camera !== 'glasses') throw new Error('Elegí celular o lentes.');
+      if (args.camera === 'glasses' && wifiLensConnection.phase !== 'connected') throw new Error('Los lentes están desconectados.');
+      if (args.camera !== source) await toggleCameraSource();
+      return { ok: true, requestedCamera: args.camera };
+    },
+  });
 
   function goBack() {
     if (router.canGoBack()) router.back();
@@ -366,7 +434,18 @@ export default function RealtimeStreamingScreen() {
           facing="back"
           flash="off"
           mode="picture"
-          onCameraReady={() => setIsCameraReady(true)}
+          pictureSize={streamingPictureSize(pictureSizes, activeMode === 'facultad' || activeMode === 'supermercado')}
+          animateShutter={false}
+          onCameraReady={async () => {
+            const camera = cameraRef.current;
+            if (!pictureSizes.length && camera) {
+              try {
+                const sizes = await conversationDeadline(camera.getAvailablePictureSizesAsync(), 700, 'No se pudo consultar la cámara.');
+                if (mountedRef.current && cameraRef.current === camera) setPictureSizes(sizes);
+              } catch { /* Keep the camera default if size discovery is unavailable. */ }
+            }
+            if (mountedRef.current && cameraRef.current === camera) setIsCameraReady(true);
+          }}
           onMountError={(event) => setStreamError(event.message)}
           ref={cameraRef}
           style={styles.preview}
@@ -460,7 +539,7 @@ export default function RealtimeStreamingScreen() {
               tone="primary"
             />
             <ControlButton
-              disabled={!isStreaming || !isConnected || isAnalyzing}
+              disabled={isAnalyzing}
               icon={isListening ? 'microphone-off' : 'microphone'}
               label={isListening ? 'ESCUCHANDO' : 'PREGUNTAR'}
               onPress={() => void askAnny()}
