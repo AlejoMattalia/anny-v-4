@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { CameraView, scanFromURLAsync } from 'expo-camera';
-import { Linking } from 'react-native';
+import { Linking, NativeModules, Platform } from 'react-native';
 import QrScannerScreen from '../../src/app/qr-scanner';
 import { useVoiceActions } from '../../src/context/voice-commands-context';
 import { getJson } from '../../src/lib/api';
@@ -13,7 +13,7 @@ const mockLensState = { phase: 'idle' };
 jest.mock('expo-router', () => ({ router: { back: jest.fn() }, usePathname: () => '/qr-scanner', useIsFocused: () => true, useLocalSearchParams: () => ({}) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-jest.mock('react-native', () => ({ View: 'View', Text: 'Text', Pressable: 'Pressable', StyleSheet: { create: (s: unknown) => s, absoluteFill: {} }, AppState: { currentState: 'active', addEventListener: () => ({ remove: jest.fn() }) }, Linking: { openURL: jest.fn(), openSettings: jest.fn() } }));
+jest.mock('react-native', () => ({ Platform: { OS: 'android' }, NativeModules: {}, View: 'View', Text: 'Text', Pressable: 'Pressable', StyleSheet: { create: (s: unknown) => s, absoluteFill: {} }, AppState: { currentState: 'active', addEventListener: () => ({ remove: jest.fn() }) }, Linking: { openURL: jest.fn(), openSettings: jest.fn() } }));
 jest.mock('expo-camera', () => ({ CameraView: 'CameraView', scanFromURLAsync: jest.fn(), useCameraPermissions: () => [{ granted: true }, jest.fn()] }));
 jest.mock('../../src/context/wifi-lens-context', () => ({ useWifiLens: () => ({ wifiLensConnection: mockLensState, connect: mockConnect }) }));
 jest.mock('../../src/context/voice-commands-context', () => ({ useVoiceActions: jest.fn() }));
@@ -29,7 +29,7 @@ jest.mock('../../src/components/WifiLensCamera', () => {
 });
 let tree: ReactTestRenderer;
 beforeEach(() => {
-  jest.clearAllMocks(); mockLensState.phase = 'idle';
+  jest.clearAllMocks(); Platform.OS = 'android'; delete NativeModules.AnnyLensBarcode; mockLensState.phase = 'idle';
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   (SavedNetworksService.getAll as jest.Mock).mockResolvedValue([]);
   (SavedNetworksService.add as jest.Mock).mockResolvedValue({ id: 'network', ssid: 'Casa', password: 'secret', type: 'wifi' });
@@ -65,6 +65,15 @@ it('scans the locally captured lens JPEG with the native decoder', async () => {
   (scanFromURLAsync as jest.Mock).mockResolvedValue([{ data: '779123' }]);
   await open();
   expect(scanFromURLAsync).toHaveBeenCalledWith('data:image/jpeg;base64,lens-frame', expect.arrayContaining(['qr', 'ean13']));
+  expect(getJson).toHaveBeenCalledWith('/api/product/779123');
+});
+it('uses Vision to recognize product barcodes from lens images on iOS', async () => {
+  Platform.OS = 'ios'; mockLensState.phase = 'connected'; mockCapture.mockResolvedValue('lens-frame');
+  const scan = jest.fn().mockResolvedValue([{ type: 'ean13', data: '779123' }]);
+  NativeModules.AnnyLensBarcode = { scan };
+  await open();
+  expect(scan).toHaveBeenCalledWith('lens-frame');
+  expect(scanFromURLAsync).not.toHaveBeenCalled();
   expect(getJson).toHaveBeenCalledWith('/api/product/779123');
 });
 it('does not process a frame that completes after leaving the scanner', async () => {

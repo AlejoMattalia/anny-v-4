@@ -45,6 +45,7 @@ export default function AssistanceMedia({ ref, role, glasses = false, serverVide
     let nativeSource: boolean | null = null;
     let peerSupportsLensVideo = false;
     let videoUpdate = Promise.resolve();
+    let incomingAnswer = Promise.resolve();
     let attachedCallId = '';
     let audioRevision = 0;
     const audio = Voximplant.Hardware.AudioDeviceManager.getInstance();
@@ -65,13 +66,13 @@ export default function AssistanceMedia({ ref, role, glasses = false, serverVide
         if (active !== device) audio.selectAudioDevice(device);
       } catch { console.warn('[Assistance] No se pudo actualizar la salida de audio.'); }
     }
-    const lensVideo = Platform.OS === 'android' ? NativeModules.LocalLensCallVideo as {
+    const lensVideo = NativeModules.LocalLensCallVideo as {
       setSource(callId: string, glasses: boolean): Promise<void>;
       stop(callId: string): Promise<void>;
-    } | undefined : undefined;
+    } | undefined;
     // Only the PDV camera is displayed. Sending the tutor camera or sending
     // the PDV camera behind the lens feed wastes bandwidth and an encoder.
-    // With the Android bridge, configure its source before enabling the first
+    // With a native bridge, configure its source before enabling the first
     // outgoing track. Later source changes keep that same track and audio.
     const settings = () => ({ video: { sendVideo: role === 'PDV' && !desiredServerVideo.current && !desiredGlasses.current && !lensVideo, receiveVideo: role === 'TUTOR' } });
     syncVideo.current = () => {
@@ -205,11 +206,19 @@ export default function AssistanceMedia({ ref, role, glasses = false, serverVide
         listen(client, Voximplant.ClientEvents.IncomingCall, event => {
           if (stopped || failed || role !== 'PDV' || activeCall.current) { safely(() => event.call.decline()); return; }
           attach(event.call);
-          try {
+          incomingAnswer = (async () => { try {
+            // iOS requires videoSource before answerWithSettings. This also
+            // avoids creating the default camera track before the lens source.
+            if (Platform.OS === 'ios' && lensVideo) {
+              const source = desiredGlasses.current;
+              await bounded(lensVideo.setSource(event.call.callId, source));
+              nativeSource = source;
+            }
+            if (stopped || failed || activeCall.current !== event.call) return;
             const options = settings();
             sendingVideo = options.video.sendVideo;
             event.call.answer(options);
-          } catch { fail('No se pudo responder la videollamada.'); }
+          } catch { fail('No se pudo responder la videollamada.'); } })();
         });
         listen(client, Voximplant.ClientEvents.ConnectionFailed, () => fail('No se pudo conectar con el servicio de llamadas.'));
         listen(client, Voximplant.ClientEvents.ConnectionClosed, () => {
@@ -232,6 +241,7 @@ export default function AssistanceMedia({ ref, role, glasses = false, serverVide
       previousCleanup = (async () => {
         safely(() => call?.hangup());
         await videoUpdate;
+        await incomingAnswer;
         if (attachedCallId && lensVideo) {
           try { await bounded(lensVideo.stop(attachedCallId)); } catch {}
         }

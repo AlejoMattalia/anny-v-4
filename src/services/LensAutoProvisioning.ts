@@ -1,7 +1,8 @@
 import {Buffer} from 'buffer';
 import {PermissionsAndroid, Platform} from 'react-native';
-import {BleManager, Device, ScanMode, State} from 'react-native-ble-plx';
+import {BleManager, Device, ScanMode} from 'react-native-ble-plx';
 import {LensDiscoveryError, waitForLensOperation} from './lensOperation';
+import {waitForLensBluetooth} from './LensBluetoothState';
 
 const SERVICE = 'e7a20001-8f21-4c7d-9b32-1c9a52f00100';
 const RX = 'e7a20002-8f21-4c7d-9b32-1c9a52f00100';
@@ -62,12 +63,7 @@ export async function discoverAndConfigureLens(
     manager = new BleManager();
   }
   const ble = manager;
-  if ((await waitForLensOperation(() => ble.state(), signal, 5000,
-    'Bluetooth no respondió. Apagalo, volvé a activarlo y reintentá.')) !== State.PoweredOn) {
-    throw new LensDiscoveryError(
-      'Activá Bluetooth para que Anny encuentre los lentes. El video se transmite por Wi-Fi.',
-    );
-  }
+  await waitForLensBluetooth(ble, signal);
   let device: Device | null = null;
   onProgress('Buscando tus lentes…');
   for (let attempt = 1; attempt <= 3 && !device; attempt++) {

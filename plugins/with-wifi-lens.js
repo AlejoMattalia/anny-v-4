@@ -1,10 +1,28 @@
 /* global __dirname */
-const { withAndroidManifest, withAppBuildGradle, withDangerousMod, withMainApplication } = require('expo/config-plugins');
+const { withAndroidManifest, withAppBuildGradle, withDangerousMod, withMainApplication, withPodfile, withInfoPlist } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
 // Keep the v3 native transport in source control across Expo prebuilds.
 module.exports = function withWifiLens(config) {
+  config = withInfoPlist(config, (mod) => {
+    // Lens IPs change with DHCP. On iOS 17+, a local-network exception alone
+    // does not allow HTTP IP addresses. Fine-grained keys override this flag.
+    const ats = mod.modResults.NSAppTransportSecurity ??= {};
+    ats.NSAllowsArbitraryLoads = true;
+    delete ats.NSAllowsLocalNetworking;
+    delete ats.NSAllowsArbitraryLoadsInWebContent;
+    delete ats.NSAllowsArbitraryLoadsForMedia;
+    return mod;
+  });
+  config = withPodfile(config, (mod) => {
+    const declaration = "pod 'AnnyLens', :path => '../plugins/lens-wifi/ios'";
+    if (!mod.modResults.contents.includes(declaration)) {
+      if (!mod.modResults.contents.includes('use_expo_modules!')) throw new Error('No se encontró el target de Expo en el Podfile de iOS.');
+      mod.modResults.contents = mod.modResults.contents.replace('use_expo_modules!', `use_expo_modules!\n  ${declaration}`);
+    }
+    return mod;
+  });
   config = withAppBuildGradle(config, (mod) => {
     const dependency = 'implementation("com.voximplant:voximplant-sdk:2.45.0")';
     if (!mod.modResults.contents.includes(dependency)) {

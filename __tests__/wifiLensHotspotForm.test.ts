@@ -1,6 +1,6 @@
 import React from 'react';
 import {act, create, type ReactTestRenderer} from 'react-test-renderer';
-import {Pressable, Text} from 'react-native';
+import {Platform, Pressable, Text} from 'react-native';
 import {WifiLensNetworks} from '../src/components/wifi-lens-networks';
 import SavedNetworksService from '../src/services/SavedNetworksService';
 import {scanLensNetworks} from '../src/services/scanLensNetworks';
@@ -40,7 +40,7 @@ async function press(text: string) {
   await act(async () => {button!.props.onPress();});
 }
 beforeEach(async () => {
-  jest.clearAllMocks();
+  jest.clearAllMocks(); Platform.OS = 'android';
   await act(async () => {renderer = create(React.createElement(WifiLensNetworks));});
   await press('Agregar red');
   await act(async () => {
@@ -63,5 +63,14 @@ it('offers scanning only after selecting another phone and saves that choice', a
   await press('Buscar hotspot de otro celular');
   expect(scanLensNetworks).toHaveBeenCalledTimes(1);
   await press('Guardar');
+  expect(SavedNetworksService.add).toHaveBeenCalledWith('Phone', 'test-password', 'hotspot', 'other-phone');
+});
+
+it('offers the current iPhone network while retaining manual hotspot entry', async () => {
+  Platform.OS = 'ios';
+  await press('Otro celular');
+  await press('Consultar red actual');
+  await press('Guardar');
+  expect(scanLensNetworks).toHaveBeenCalledTimes(1);
   expect(SavedNetworksService.add).toHaveBeenCalledWith('Phone', 'test-password', 'hotspot', 'other-phone');
 });

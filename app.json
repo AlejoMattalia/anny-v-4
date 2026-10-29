@@ -12,7 +12,29 @@
       "infoPlist": {
         "NSContactsUsageDescription": "Anny necesita acceder a tus contactos para mostrar tu agenda y ayudarte a llamar a tus contactos.",
         "NSLocationWhenInUseUsageDescription": "Anny necesita tu ubicación para decirte dónde estás, mostrar el mapa y encontrar lugares cercanos.",
-        "NSMicrophoneUsageDescription": "Anny necesita el micrófono para hablar con tu tutor durante la asistencia."
+        "NSMicrophoneUsageDescription": "Anny necesita el micrófono para escuchar tus comandos, conversar y hablar con tu tutor.",
+        "NSLocalNetworkUsageDescription": "Anny necesita conectarse a tus lentes por la red local para mostrar el video y analizar las imágenes.",
+        "NSBonjourServices": [
+          "_http._tcp.",
+          "_http._tcp."
+        ],
+        "NSBluetoothAlwaysUsageDescription": "Anny necesita Bluetooth para encontrar y configurar tus lentes.",
+        "UIBackgroundModes": [
+          "audio",
+          "audio"
+        ],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSMotionUsageDescription": "Anny usa la orientación del iPhone para ayudarte durante el recorrido.",
+        "NSSpeechRecognitionUsageDescription": "Anny necesita reconocimiento de voz para conversar con la app.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.anonymous.annyv4",
+      "buildNumber": "11",
+      "entitlements": {
+        "com.apple.developer.networking.wifi-info": true,
+        "com.apple.developer.networking.HotspotConfiguration": true
       }
     },
     "android": {
@@ -51,6 +73,9 @@
         {
           "android": {
             "usesCleartextTraffic": true
+          },
+          "ios": {
+            "usePrecompiledModules": false
           }
         }
       ],
@@ -77,7 +102,7 @@
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Anny necesita usar el micrófono para que puedas dictar tu correo, contraseña y comandos.",
+          "microphonePermission": "Anny necesita el micrófono para escuchar tus comandos, conversar y hablar con tu tutor.",
           "speechRecognitionPermission": "Anny necesita reconocimiento de voz para conversar con la app."
         }
       ],
@@ -102,6 +127,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9dc678b3-d7c3-4319-97e7-377c170cf827"
+      }
+    },
+    "owner": "alejomattalia"
   }
 }

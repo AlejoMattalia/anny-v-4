@@ -1,7 +1,7 @@
 import {PermissionsAndroid, Platform} from 'react-native';
 import WifiManager from 'react-native-wifi-reborn';
 import {scanLensNetworks} from '../src/services/scanLensNetworks';
-jest.mock('react-native-wifi-reborn', () => ({isEnabled: jest.fn(), reScanAndLoadWifiList: jest.fn(), loadWifiList: jest.fn()}));
+jest.mock('react-native-wifi-reborn', () => ({getCurrentWifiSSID: jest.fn(), isEnabled: jest.fn(), reScanAndLoadWifiList: jest.fn(), loadWifiList: jest.fn()}));
 beforeEach(() => {
   jest.clearAllMocks();
   jest.replaceProperty(Platform, 'OS', 'android');
@@ -10,6 +10,25 @@ beforeEach(() => {
   jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+it('uses only the current SSID on iOS without invoking Android scan APIs', async () => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  (WifiManager.getCurrentWifiSSID as jest.Mock).mockResolvedValue('"Casa"');
+  await expect(scanLensNetworks()).resolves.toEqual([{ssid: 'Casa', signal: -100}]);
+  expect(WifiManager.reScanAndLoadWifiList).not.toHaveBeenCalled();
+  expect(WifiManager.loadWifiList).not.toHaveBeenCalled();
+  expect(PermissionsAndroid.check).not.toHaveBeenCalled();
+});
+it.each(['', '<unknown ssid>'])('leaves saved-network fallback available when iOS hides the SSID (%s)', async value => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  (WifiManager.getCurrentWifiSSID as jest.Mock).mockResolvedValue(value);
+  await expect(scanLensNetworks()).resolves.toEqual([]);
+});
+it('bounds an unresponsive iOS SSID query', async () => {
+  jest.useFakeTimers(); jest.replaceProperty(Platform, 'OS', 'ios');
+  (WifiManager.getCurrentWifiSSID as jest.Mock).mockReturnValue(new Promise(() => {}));
+  const result = scanLensNetworks(); await jest.advanceTimersByTimeAsync(8000);
+  await expect(result).resolves.toEqual([]); expect(jest.getTimerCount()).toBe(0);
+});
 it('does not scan or use cached networks while client Wi-Fi is off for a hotspot', async () => {
   (WifiManager.isEnabled as jest.Mock).mockResolvedValue(false);
   await expect(scanLensNetworks()).resolves.toEqual([]);

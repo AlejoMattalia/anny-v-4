@@ -20,6 +20,13 @@ let guidancePaused = false;
 let lastSpokenText = '';
 let listeningGeneration = 0;
 let recognitionDrain: Promise<void> = Promise.resolve();
+let speechAudioOwner = 0;
+function releaseSpeechAudio(token: number) {
+  if (Platform.OS !== 'ios' || !token || speechAudioOwner !== token) return;
+  speechAudioOwner = 0;
+  if (listening || isTutorCallActive() || conversationIsActive()) return;
+  try { ExpoSpeechRecognitionModule.setAudioSessionActiveIOS(false, { notifyOthersOnDeactivation: true }); } catch {}
+}
 export const getLastSpokenText = () => lastSpokenText;
 export const setGuidancePaused = (paused: boolean) => { guidancePaused = paused; };
 export async function speakGuidance(text: string) { if (!guidancePaused) await speak(text, { priority: 'guidance' }); }
@@ -44,6 +51,18 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
     return;
   }
 
+  if (Platform.OS === 'ios') {
+    try {
+      // Accessibility guidance must be audible with the iPhone silent switch.
+      ExpoSpeechRecognitionModule.setCategoryIOS({ category: 'playback', mode: 'spokenAudio', categoryOptions: ['duckOthers'] });
+      ExpoSpeechRecognitionModule.setAudioSessionActiveIOS(true);
+      speechAudioOwner = speechToken;
+    } catch (error) {
+      options.onError?.(error instanceof Error ? error : new Error('No se pudo activar el audio.'));
+      return;
+    }
+  }
+
   await new Promise<void>((resolve) => {
     let settled = false;
     const cancelFallback = streamingTimeout(() => finish(), Math.max(10000, text.length * 150 / (settings.voiceRate || 1)));
@@ -55,13 +74,15 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
 
       settled = true;
       cancelFallback();
+      // A late speech callback must never deactivate the tutor's microphone.
+      releaseSpeechAudio(speechToken);
       resolve();
     }
 
     Speech.speak(text, {
       language: voice?.language ?? 'es',
       voice: voice?.identifier,
-      useApplicationAudioSession: false,
+      useApplicationAudioSession: Platform.OS === 'ios',
       pitch: 1,
       rate: settings.voiceRate,
       onStart: options.onStart,
@@ -79,7 +100,9 @@ export async function speak(text: string, options: { onError?: (error: Error) =>
 
 export async function stopSpeaking() {
   latestSpeechToken += 1;
+  const owner = speechAudioOwner;
   await Speech.stop();
+  releaseSpeechAudio(owner);
 }
 
 export async function requestVoicePermissions(options: { showSettingsAlert?: boolean } = {}) {

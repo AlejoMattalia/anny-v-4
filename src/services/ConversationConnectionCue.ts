@@ -1,7 +1,13 @@
-import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
+import { Platform } from 'react-native';
 
 // Bundled Coral recording: works before the server or microphone is ready.
-export function playConversationConnecting(signal: AbortSignal): Promise<void> {
+export async function playConversationConnecting(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return;
+  if (Platform.OS === 'ios') {
+    try { await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false, interruptionMode: 'duckOthers', shouldPlayInBackground: false }); }
+    catch { return; }
+  }
   return new Promise(resolve => {
     if (signal.aborted) { resolve(); return; }
     let player: AudioPlayer | undefined;

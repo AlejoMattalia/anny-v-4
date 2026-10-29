@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WifiLensConnectionCard } from './wifi-lens-connection-card';
 import { useWifiLens } from '@/context/wifi-lens-context';
@@ -107,8 +107,9 @@ export function WifiLensNetworks() {
           <Text style={styles.text}>{hotspotSource === 'this-phone' ? 'Activá Compartir Internet en 2,4 GHz y copiá su nombre y contraseña. Anny conservará este hotspot al recuperar la conexión.' : 'Conectá este celular al hotspot que comparte el otro teléfono.'}</Text>
         </> : null}
         {!editing ? <>
-          <Text style={styles.subtitle}>{networkPreference === 'hotspot' ? 'Datos del hotspot' : 'Redes disponibles cercanas'}</Text>
-          {networkPreference === 'wifi' || hotspotSource === 'other-phone' ? scanning ? <ActivityIndicator color="#6A0DAD" /> : <Pressable onPress={() => void scan()}><Text style={styles.link}>{networkPreference === 'hotspot' ? 'Buscar hotspot de otro celular' : 'Buscar redes de nuevo'}</Text></Pressable> : null}
+          <Text style={styles.subtitle}>{networkPreference === 'hotspot' ? 'Datos del hotspot' : Platform.OS === 'ios' ? 'Red WiFi del iPhone' : 'Redes disponibles cercanas'}</Text>
+          {Platform.OS === 'ios' && (networkPreference === 'wifi' || hotspotSource === 'other-phone') ? <Text style={styles.text}>Conectá el iPhone a una red de 2,4 GHz desde Ajustes. Podés usar la red actual o escribir su nombre y contraseña.</Text> : null}
+          {networkPreference === 'wifi' || hotspotSource === 'other-phone' ? scanning ? <ActivityIndicator color="#6A0DAD" /> : <Pressable accessibilityRole="button" onPress={() => void scan()}><Text style={styles.link}>{Platform.OS === 'ios' ? 'Consultar red actual' : networkPreference === 'hotspot' ? 'Buscar hotspot de otro celular' : 'Buscar redes de nuevo'}</Text></Pressable> : null}
           {detected.length && (networkPreference === 'wifi' || hotspotSource === 'other-phone') ? <ScrollView horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={styles.nearbyRow} style={styles.nearbyScroll}>
             {detected.map(({ssid: name, requires24GHz}) => <Pressable key={name} accessibilityRole="button" accessibilityLabel={`Seleccionar red ${name}${requires24GHz ? ', requiere 2,4 GHz' : ''}`} accessibilityState={{ selected: ssid === name }} onPress={() => { setSsid(name); setPassword(''); if (requires24GHz) void speak(compatibilityHint); }} style={[styles.nearbyNetwork, ssid === name && styles.nearbySelected]}>
               <Ionicons name="wifi-outline" size={16} color={ssid === name ? '#FFFFFF' : '#6A0DAD'} />

@@ -582,7 +582,7 @@ export default function PlanTripScreen() {
                     ) : item.isSaved ? (
                       <Ionicons color="#6A0DAD" name="star" size={18} />
                     ) : (
-                      <Ionicons color="#6F5873" name="map-marker-outline" size={18} />
+                      <Ionicons color="#6F5873" name="location-outline" size={18} />
                     )}
                   </View>
                   <View style={styles.listItemTextWrapper}>
@@ -752,7 +752,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: '#6F5873',
     fontSize: 11,
-    fontWeight: '950',
+    fontWeight: '900',
     textTransform: 'uppercase',
     marginTop: 8,
   },
@@ -894,7 +894,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     color: '#3C1642',
     fontSize: 18,
-    fontWeight: '950',
+    fontWeight: '900',
     marginBottom: 8,
   },
   modalDescription: {
@@ -996,7 +996,7 @@ const styles = StyleSheet.create({
   listHeaderTitle: {
     color: '#6F5873',
     fontSize: 11,
-    fontWeight: '950',
+    fontWeight: '900',
     textTransform: 'uppercase',
     marginVertical: 10,
     paddingHorizontal: 4,

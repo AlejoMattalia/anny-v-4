@@ -69,6 +69,22 @@ it('joins another phone hotspot when client Wi-Fi is on and the network is visib
   await configureLocalLens(null, 'My phone', 'test-password', jest.fn(), new AbortController().signal, 'hotspot', 'other-phone');
   expect(WifiManager.connectToProtectedWifiSSID).toHaveBeenCalledWith(expect.objectContaining({ssid: 'My phone'}));
 });
+it('joins an explicitly selected other-phone hotspot on iOS without scan results', async () => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('not joined yet'));
+  await configureLocalLens(null, 'My phone', 'test-password', jest.fn(), new AbortController().signal, 'hotspot', 'other-phone');
+  expect(WifiManager.connectToProtectedWifiSSID).toHaveBeenCalledWith(expect.objectContaining({ssid: 'My phone'}));
+  expect(WifiManager.forceWifiUsageWithOptions).not.toHaveBeenCalled();
+  expect(PermissionsAndroid.request).not.toHaveBeenCalled();
+});
+it('keeps this iPhone hotspot active when the local status request fails once', async () => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('temporary congestion'));
+  await configureLocalLens(null, 'My phone', 'test-password', jest.fn(), new AbortController().signal, 'hotspot', 'this-phone');
+  expect(WifiManager.connectToProtectedWifiSSID).not.toHaveBeenCalled();
+  expect(WifiManager.disconnect).not.toHaveBeenCalled();
+  expect(WifiManager.forceWifiUsageWithOptions).not.toHaveBeenCalled();
+});
 
 it('never joins its own hotspot even on phones that keep client Wi-Fi enabled', async () => {
   (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('temporary video congestion'));

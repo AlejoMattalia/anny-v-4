@@ -1,6 +1,7 @@
 import {PermissionsAndroid, Platform} from 'react-native';
 import WifiManager from 'react-native-wifi-reborn';
 import type {NearbyLensNetwork} from './WifiLensConnectionManager';
+import {waitForLensOperation} from './lensOperation';
 
 /** Client Wi-Fi may be off while this phone is hosting a working hotspot. */
 export async function isPhoneWifiEnabled(): Promise<boolean> {
@@ -16,6 +17,14 @@ function parseNetworks(raw: unknown): {SSID: string; level?: number; frequency?:
 }
 
 export async function scanLensNetworks(): Promise<NearbyLensNetwork[]> {
+  if (Platform.OS === 'ios') {
+    // iOS exposes the connected SSID, not a scan of surrounding access points.
+    // If it is unavailable, provisioning still tries the saved networks over BLE.
+    const ssid = await waitForLensOperation(() => WifiManager.getCurrentWifiSSID(), undefined, 8000,
+      'No se pudo consultar la red actual.').catch(() => '');
+    const name = ssid.replace(/^"|"$/g, '');
+    return name && name !== '<unknown ssid>' ? [{ ssid: name, signal: -100 }] : [];
+  }
   // Cached SSIDs are not evidence that the phone can join a network now.
   if (!await isPhoneWifiEnabled()) {return [];}
   if (Platform.OS === 'android') {

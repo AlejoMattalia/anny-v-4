@@ -6,6 +6,7 @@ import { setTutorCallActive, setConversationRequested, setConversationNarrator }
 const mockListeners = new Map<string, Set<(event: unknown) => void>>();
 jest.mock('expo-speech', () => ({ stop: jest.fn().mockResolvedValue(undefined), getAvailableVoicesAsync: jest.fn().mockResolvedValue([]), speak: jest.fn((_text, options) => options.onDone()) }));
 jest.mock('expo-speech-recognition', () => ({ ExpoSpeechRecognitionModule: {
+  setCategoryIOS: jest.fn(), setAudioSessionActiveIOS: jest.fn(),
   getPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
   requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }), isRecognitionAvailable: () => true,
   start: jest.fn(), abort: jest.fn(), addListener: (name: string, fn: (event: unknown) => void) => {
@@ -102,5 +103,24 @@ it('suppresses AI narration and phone TTS throughout a tutor call', async () => 
     await speak('Una lectura que llegó tarde.', { priority: 'stream' });
     await speakGuidance('Girá a la derecha.');
     expect(narrator).not.toHaveBeenCalled(); expect(Speech.speak).not.toHaveBeenCalled();
+  } finally { setTutorCallActive(false); }
+});
+
+it('uses the iOS playback session for speech in silent mode and releases it on completion', async () => {
+  await speak('Te escucho.');
+  expect(recognition.setCategoryIOS).toHaveBeenCalledWith({ category: 'playback', mode: 'spokenAudio', categoryOptions: ['duckOthers'] });
+  expect(Speech.speak).toHaveBeenCalledWith('Te escucho.', expect.objectContaining({ useApplicationAudioSession: true }));
+  expect(recognition.setAudioSessionActiveIOS).toHaveBeenNthCalledWith(1, true);
+  expect(recognition.setAudioSessionActiveIOS).toHaveBeenLastCalledWith(false, { notifyOthersOnDeactivation: true });
+});
+it('does not deactivate call audio when a previous iOS speech completion arrives late', async () => {
+  let done!: () => void;
+  (Speech.speak as jest.Mock).mockImplementationOnce((_text, options) => { done = options.onDone; });
+  const pending = speak('Un aviso anterior.'); await jest.advanceTimersByTimeAsync(0);
+  setTutorCallActive(true);
+  try {
+    done(); await pending;
+    expect(recognition.setAudioSessionActiveIOS).toHaveBeenCalledTimes(1);
+    expect(recognition.setAudioSessionActiveIOS).toHaveBeenCalledWith(true);
   } finally { setTutorCallActive(false); }
 });

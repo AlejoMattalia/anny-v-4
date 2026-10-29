@@ -2,7 +2,7 @@ import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import AssistanceMedia from '../../src/components/assistance-media.native';
 import { Voximplant } from 'react-native-voximplant';
-import { NativeModules, PermissionsAndroid } from 'react-native';
+import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { remoteCameraFeed, remoteCameraMessage } from '../../src/lib/assistance-remote-camera';
 import type { AssistanceMediaHandle } from '../../src/components/assistance-media.types';
 
@@ -57,6 +57,7 @@ let tree: ReactTestRenderer;
 const callbacks = { onConnected: jest.fn(), onEnded: jest.fn(), onSource: jest.fn(), onError: jest.fn() };
 beforeEach(() => {
   jest.clearAllMocks(); jest.useFakeTimers();
+  Platform.OS = 'android';
   delete NativeModules.LocalLensCallVideo;
   audio.getAudioDevices.mockReset().mockResolvedValue(['speaker', 'earpiece']);
   audio.getActiveDevice.mockReset().mockResolvedValue('earpiece');
@@ -69,6 +70,45 @@ beforeEach(() => {
   process.env.EXPO_PUBLIC_VOXIMPLANT_TUTOR_PASSWORD = 'test';
 });
 afterEach(async () => { await act(async () => tree.unmount()); jest.useRealTimers(); });
+it.each([true, false])('attaches the iOS custom source before answering (glasses=%s)', async glasses => {
+  Platform.OS = 'ios';
+  const bridge = { setSource: jest.fn().mockResolvedValue(undefined), stop: jest.fn().mockResolvedValue(undefined) };
+  NativeModules.LocalLensCallVideo = bridge;
+  await act(async () => { tree = create(React.createElement(AssistanceMedia, { role: 'PDV', glasses, ...callbacks })); });
+  await act(async () => { client.emit('incoming', { call: sdk.mockCall }); });
+  expect(bridge.setSource).toHaveBeenCalledWith('call-1', glasses);
+  expect(bridge.setSource.mock.invocationCallOrder[0]).toBeLessThan(sdk.mockCall.answer.mock.invocationCallOrder[0]);
+  await act(async () => { sdk.mockCall.emit('connected'); sdk.mockCall.emit('message', { text: 'LENS_VIDEO_WEBRTC_V1' }); });
+  expect(sdk.mockCall.sendVideo).toHaveBeenLastCalledWith(true);
+  expect(sdk.mockCall.sendAudio).toHaveBeenCalledWith(true);
+  expect(PermissionsAndroid.request).not.toHaveBeenCalled();
+});
+it('never answers after unmount and releases a source that was still preparing on iOS', async () => {
+  Platform.OS = 'ios'; let finish!: () => void;
+  const bridge = { setSource: jest.fn(() => new Promise<void>(resolve => { finish = resolve; })), stop: jest.fn().mockResolvedValue(undefined) };
+  NativeModules.LocalLensCallVideo = bridge;
+  await act(async () => { tree = create(React.createElement(AssistanceMedia, { role: 'PDV', glasses: true, ...callbacks })); });
+  await act(async () => { client.emit('incoming', { call: sdk.mockCall }); });
+  await act(async () => { tree.unmount(); });
+  expect(sdk.mockCall.answer).not.toHaveBeenCalled();
+  await act(async () => { finish(); });
+  expect(sdk.mockCall.answer).not.toHaveBeenCalled();
+  expect(bridge.stop).toHaveBeenCalledWith('call-1');
+});
+it('prepares iOS video before answering even when a server camera is initially selected', async () => {
+  Platform.OS = 'ios';
+  const bridge = { setSource: jest.fn().mockResolvedValue(undefined), stop: jest.fn().mockResolvedValue(undefined) };
+  NativeModules.LocalLensCallVideo = bridge;
+  const props = { role: 'PDV' as const, ...callbacks };
+  await act(async () => { tree = create(React.createElement(AssistanceMedia, { ...props, serverVideo: true, glasses: true })); });
+  await act(async () => { client.emit('incoming', { call: sdk.mockCall }); });
+  expect(bridge.setSource.mock.invocationCallOrder[0]).toBeLessThan(sdk.mockCall.answer.mock.invocationCallOrder[0]);
+  await act(async () => { sdk.mockCall.emit('connected'); });
+  expect(sdk.mockCall.sendVideo).not.toHaveBeenCalled();
+  await act(async () => { tree.update(React.createElement(AssistanceMedia, { ...props, serverVideo: false, glasses: false })); });
+  expect(bridge.setSource).toHaveBeenLastCalledWith('call-1', false);
+  expect(sdk.mockCall.sendVideo).toHaveBeenLastCalledWith(true);
+});
 it.each(['PDV', 'TUTOR'] as const)('connects %s to the existing account node before authenticating', async role => {
   await act(async () => { tree = create(React.createElement(AssistanceMedia, { role, ...callbacks })); });
   expect(callbacks.onError).not.toHaveBeenCalled();

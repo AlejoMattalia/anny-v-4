@@ -12,7 +12,14 @@ export function WifiLensConnectionCard({ showManage = true, compact = false }: {
     {!compact ? <Text style={styles.title}>Lentes WiFi</Text> : null}
     <View style={styles.row}>
       <Text style={[styles.label, compact && styles.smallLabel]}>WiFi</Text>
-      <Switch accessibilityLabel="Cambiar entre WiFi y Hotspot" value={networkPreference === 'hotspot'} onValueChange={(value) => void setNetworkPreference(value ? 'hotspot' : 'wifi')} trackColor={{ false: '#3C1642', true: '#3C1642' }} thumbColor="#FFFFFF" />
+      <Switch
+        accessibilityLabel="Cambiar entre WiFi y Hotspot"
+        value={networkPreference === 'hotspot'}
+        onValueChange={(value) => void setNetworkPreference(value ? 'hotspot' : 'wifi')}
+        trackColor={{ false: '#3C1642', true: '#3C1642' }}
+        ios_backgroundColor="#3C1642"
+        thumbColor="#FFFFFF"
+      />
       <Text style={[styles.label, compact && styles.smallLabel]}>Hotspot</Text>
     </View>
     {!compact ? <Text accessibilityLiveRegion="polite" style={styles.status}>{label}</Text> : null}

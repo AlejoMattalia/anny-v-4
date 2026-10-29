@@ -255,7 +255,10 @@ export async function configureLocalLens(
         const nearby = await scanLensNetworks().catch(() => []);
         const phoneSSID = await WifiManager.getCurrentWifiSSID().catch(() => '');
         if (signal.aborted) {throw new Error('Conexión cancelada.');}
-        if (phoneSSID.replace(/^"|"$/g, '') === ssid || nearby.some(network => network.ssid === ssid)) {
+        // iPhone cannot scan nearby SSIDs. An explicitly selected other-phone
+        // hotspot may still be joined through the system Wi-Fi approval dialog.
+        if ((Platform.OS === 'ios' && hotspotSource === 'other-phone') ||
+          phoneSSID.replace(/^"|"$/g, '') === ssid || nearby.some(network => network.ssid === ssid)) {
           onProgress(`Conectando este celular al hotspot ${ssid}…`);
           await joinWifi(ssid, password, true);
         }

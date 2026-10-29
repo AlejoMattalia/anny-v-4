@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
   formLabel: {
     color: '#6F5873',
     fontSize: 11,
-    fontWeight: '950',
+    fontWeight: '900',
     textTransform: 'uppercase',
     marginTop: 8,
   },

@@ -85,7 +85,7 @@ it('releases a reservation that completes after logout instead of opening a call
   (startAssistanceCall as jest.Mock).mockReturnValue(new Promise(done => { resolve = done; }));
   await mount('TUTOR');
   await act(async () => { receive({ type: 'help', _id: 'pdv', currentLocation: { latitude: 1, longitude: 2 } }); await state.respond(true); });
-  let request!: ReturnType<typeof state.request>;
+  let request!: ReturnType<typeof state.startCall>;
   await act(async () => { request = state.startCall(); });
   (getAuthSession as jest.Mock).mockResolvedValue(null);
   await act(async () => { (subscribeAuthSession as jest.Mock).mock.calls.at(-1)[0](); });

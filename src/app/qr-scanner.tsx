@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { CameraView, scanFromURLAsync, useCameraPermissions, type BarcodeType } from 'expo-camera';
+import { CameraView, useCameraPermissions, type BarcodeType } from 'expo-camera';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -12,6 +12,7 @@ import { getJson } from '../lib/api';
 import { speak } from '../lib/voice';
 import SavedNetworksService from '../services/SavedNetworksService';
 import { isWebQr, parseWifiQr } from '../services/QrCodes';
+import { scanLensCodes } from '../services/scanLensCodes';
 
 const types: BarcodeType[] = ['qr', 'ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'code93', 'codabar', 'itf14', 'pdf417', 'aztec', 'datamatrix'];
 export default function QrScannerScreen() {
@@ -93,7 +94,7 @@ export default function QrScannerScreen() {
       try {
         const frame = await lens.current?.capture();
         if (stopped || !frame) return;
-        const results = await scanFromURLAsync(`data:image/jpeg;base64,${frame}`, types);
+        const results = await scanLensCodes(frame, types);
         if (!stopped && results[0]?.data) { await handleCode(results[0].data); return; }
       } catch (error) {
         if (!stopped) setStatus(error instanceof Error ? error.message : 'Esperando una imagen de los lentes.');

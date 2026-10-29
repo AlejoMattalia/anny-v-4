@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
   },
   // Modal detail
   modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(5, 7, 11, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     color: '#3C1642',
     fontSize: 18,
-    fontWeight: '950',
+    fontWeight: '900',
     marginBottom: 4,
   },
   modalLabel: {

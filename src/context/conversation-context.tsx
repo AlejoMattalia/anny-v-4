@@ -294,6 +294,7 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
       onError={() => { if (sessionRef.current?.ticket === session.ticket) { resume.current ??= { history: [] }; reconnect(); } }}
       onHttpError={() => { if (sessionRef.current?.ticket === session.ticket) { resume.current ??= { history: [] }; reconnect(); } }}
       onRenderProcessGone={() => { if (sessionRef.current?.ticket === session.ticket) { resume.current ??= { history: [] }; reconnect(); } }}
+      onContentProcessDidTerminate={() => { if (sessionRef.current?.ticket === session.ticket) { resume.current ??= { history: [] }; reconnect(); } }}
     /> : expanded ? <View style={styles.center}>
       <Pressable accessibilityRole="button" accessibilityLabel={error ? `${error}. Tocá para reintentar.` : status}
         style={[styles.orb, Boolean(error) && styles.errorOrb]}

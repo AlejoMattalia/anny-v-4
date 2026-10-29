@@ -1,10 +1,87 @@
 # Welcome to your Expo app 👋👋
 
+## iPhone: adaptación nativa
+
+`anny-v4` incluye una implementación iOS de los módulos de lentes en
+`plugins/lens-wifi/ios`. El plugin `with-wifi-lens` agrega el pod `AnnyLens`
+durante `expo prebuild`; no editar el directorio generado `ios/`.
+Requiere una compilación propia, no Expo Go.
+
+En iOS, `expo-build-properties.ios.usePrecompiledModules` está desactivado
+para compilar los módulos de Expo contra el mismo `ExpoModulesCore` instalado.
+La IPA 1.0.9 (10) mezclaba binarios precompilados incompatibles: `dyld` la
+cerraba al arrancar porque `ExpoCamera` requería el símbolo Swift
+`AnyModule._decorateModule(object:in:)`, ausente en el núcleo incluido.
+Mantener esta opción en las compilaciones locales y de EAS; después de cambiarla
+hay que generar e instalar una nueva IPA. Una actualización de JavaScript
+no reemplaza esos binarios.
+
+- Vinculación guardada en Keychain y configuración de los lentes mediante BLE.
+  Se espera la inicialización de CoreBluetooth y el permiso inicial de iOS.
+- Transporte HTTP local cancelable y video UDP con recuperación FEC y respaldo
+  MJPEG. El receptor conserva el cuadro más reciente para evitar acumular retraso.
+  Las capturas para IA usan únicamente JPEG completos y recientes del stream.
+- Video al tutor mediante `VICustomVideoSource` de Voximplant: cuadros mostrados
+  por los lentes o cámara trasera del iPhone, manteniendo la misma llamada.
+  En iOS la fuente se instala antes de responder, como exige el SDK.
+- QR y códigos de productos desde los lentes mediante Vision. La función de
+  Expo para imágenes estáticas en iOS sólo detecta QR; la cámara del celular
+  conserva el lector de Expo.
+- Voz audible en modo silencio y recuperación de la conversación si iOS
+  termina el proceso de WebKit. La IA y los anuncios siguen silenciados durante
+  la asistencia con un tutor.
+
+En iPhone se puede consultar la red Wi-Fi actual y escribir otra manualmente;
+iOS no ofrece el escaneo de redes cercanas de Android. Al compartir Internet,
+activar **Maximizar compatibilidad** y seleccionar **Este celular**. Para otro
+teléfono, seleccionar **Otro celular**; Anny puede solicitar unirse a su hotspot.
+Los lentes actuales usan BLE + Wi-Fi. El transporte antiguo Bluetooth Classic
+SPP de Android no tiene equivalente genérico en iPhone.
+
+El video y el análisis visual se pausan al pasar a segundo plano en iOS y se
+reanudan al volver a la app. No se promete video con el iPhone bloqueado. El
+modo de audio en segundo plano está declarado para las llamadas.
+
+`eas.json` contiene `preview` para instalación interna en un iPhone registrado,
+`ios-simulator` y `production`. Se conserva el identificador
+`com.anonymous.annyv4`. Los perfiles `preview` y `production` configuran APNs
+de producción; la ejecución local usa desarrollo. Para probar después:
+
+1. Iniciar sesión en Expo, vincular el proyecto con EAS y registrar el iPhone.
+2. Configurar en el entorno `preview` de EAS las mismas variables
+   `EXPO_PUBLIC_*` que usa la instalación Android. `.env` no está versionado:
+   revisar especialmente URLs de servicios, Google Places, usuarios de llamadas
+   y OneSignal. El servicio de conversación debe usar HTTPS.
+3. Configurar las credenciales APNs de esta app en OneSignal para recibir avisos
+   en iOS. Las credenciales de Android no habilitan APNs.
+4. Ejecutar `npx eas-cli@latest build --platform ios --profile preview` y usar la
+   firma Ad Hoc de la cuenta Apple. TestFlight no es necesario para ese perfil.
+
+Validación local: `npm run test:wifi`, `npm run test:voice`,
+`npm run test:assistance`, `npm run test:ios-lens`, `npx tsc --noEmit` y
+`npx expo export --platform ios`. `test:ios-lens` compila el protocolo portable
+con AddressSanitizer y UndefinedBehaviorSanitizer: orden y pérdida de paquetes,
+FEC, plazos de cuadros parciales, feedback, entradas inválidas, MJPEG y NV12.
+La generación de iOS se valida con `npx expo prebuild --platform ios --no-install`.
+Estas comprobaciones **no compilan los módulos Objective-C++ contra Xcode**.
+La compilación iOS 1.0.9 (11) se compiló y firmó en EAS. Se verificó la IPA:
+los módulos afectados se enlazan desde código fuente y las 194 referencias
+dinámicas a frameworks Expo incluidos se resuelven, sin los símbolos ausentes
+de la compilación 10. El usuario confirmó que la compilación 11 abre en su
+iPhone. Las pruebas funcionales, incluida la conexión de los lentes, siguen
+pendientes en el dispositivo.
+
+En el iPhone se debe verificar el primer pedido de permisos, lentes por router
+y hotspot, cambio lentes/celular durante llamadas iPhone–Android en ambos roles,
+orientación y fluidez del video, audio Bluetooth, voz con modo silencio,
+ubicación/lugares cercanos, códigos de productos, reconexión y notificaciones.
+Usar iOS 16.4 o posterior, conforme al mínimo del SDK Expo 57.
+
 ## Comandos de voz de v3
 
 En Inicio, el micrófono sin texto de la barra inferior inicia o cancela la
-escucha. **Hablar con Anny** queda reservado al futuro asistente conversacional
-y permanece deshabilitado. En las otras pantallas se ofrece un micrófono
+escucha. **Hablar con Anny** abre la conversación con la IA y conserva un
+acceso separado de los comandos. En las otras pantallas se ofrece un micrófono
 flotante; el botón físico de los lentes también inicia o cancela la escucha.
 Durante una llamada el micrófono queda reservado para el audio. Streaming usa
 su botón **Preguntar** y admite «Anny» seguido de cualquier comando, además de

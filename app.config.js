@@ -27,7 +27,13 @@ module.exports = ({ config }) => {
   return {
     ...config,
     plugins: [
-      ...(config.plugins || []),
+      ...(config.plugins || []).map((plugin) => {
+        // Both Ad Hoc and App Store builds use the production APNs environment.
+        if (Array.isArray(plugin) && plugin[0] === 'onesignal-expo-plugin') {
+          return [plugin[0], { ...plugin[1], mode: ['preview', 'production'].includes(process.env.EAS_BUILD_PROFILE) ? 'production' : 'development' }];
+        }
+        return plugin;
+      }),
       [
         'react-native-maps',
         {

@@ -73,7 +73,8 @@
     "lint": "expo lint",
     "test:wifi": "jest --config jest.wifi.config.cjs --runInBand",
     "test:assistance": "jest --config jest.assistance.config.cjs --runInBand",
-    "test:voice": "jest --config jest.voice.config.cjs --runInBand"
+    "test:voice": "jest --config jest.voice.config.cjs --runInBand",
+    "test:ios-lens": "bash scripts/test-ios-lens.sh"
   },
   "private": true,
   "expo": {
