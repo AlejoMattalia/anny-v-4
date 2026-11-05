@@ -5,9 +5,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { WebView as WebViewInstance, WebViewMessageEvent } from 'react-native-webview';
 
+import { setMemoryOwner, rememberStreamingText, subscribeMemoryContext } from '@/lib/streaming-memory';
+import { isStreamingMode } from '@/services/StreamingModes';
 import { useAssistance } from '@/context/assistance-context';
 import { useVoiceCommands } from '@/context/voice-commands-context';
 import { useWifiLens } from '@/context/wifi-lens-context';
+import { useWifiLensButtons } from '@/context/useWifiLensButtons';
 import { getExplorationLocation, reverseGeocodeLocation } from '@/lib/current-location';
 import { playConversationConnecting } from '@/services/ConversationConnectionCue';
 import { createVoiceConversation, endVoiceConversation, voiceApiUrl, type ConversationSession } from '@/lib/voice-conversation';
@@ -20,7 +23,7 @@ import { appControl, validateAppAction, type AppAction, type AppActionArgs } fro
 import { ConversationAppService } from '@/services/ConversationAppService';
 import { isTutorCallActive, setConversationNarrator, setConversationRequested, withoutToolNarration } from '@/services/ConversationRuntime';
 import { parseVoiceCommand } from '@/services/VoiceCommands';
-import { explicitlyEndsConversation } from '@/services/ConversationEnd';
+import { explicitlyEndsConversation, explicitlyExitsFunction } from '@/services/ConversationEnd';
 
 const confirmationMessages: Record<string, string> = {
   help: '¿Querés enviar una solicitud de ayuda a tus tutores?', request_assistance: '¿Querés enviar una solicitud de ayuda a tus tutores?',
@@ -85,9 +88,13 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
   });
   if (!service.current) service.current = createService();
 
-  function inject(method: 'start' | 'result' | 'stop' | 'narrate' | 'interrupt' | 'toggleMute' | 'setContext' | 'setSpeed' | 'setForeground', ...args: unknown[]) {
+  function inject(method: 'start' | 'result' | 'stop' | 'narrate' | 'interrupt' | 'toggleMute' | 'setContext' | 'setSpeed' | 'setForeground' | 'setMemory', ...args: unknown[]) {
     web.current?.injectJavaScript(`window.AnnyVoice?.${method}(${args.map(arg => JSON.stringify(arg)).join(',')});true;`);
   }
+  const rememberedContext = useRef('');
+  useEffect(() => { setMemoryOwner(assistance.user?._id || ''); }, [assistance.user?._id]);
+  useEffect(() => subscribeMemoryContext(text => { rememberedContext.current = text; if (active.current) inject('setMemory', text); }), []);
+
   function release() {
     clearTimeout(startupTimer.current);
     clearTimeout(retryTimer.current);
@@ -166,6 +173,9 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
   useEffect(() => () => setConversationRequested(false), []);
   useEffect(() => { if (active.current) { inject('setContext', pathname); inject('setForeground', foreground.current && pathname !== '/assistance-call'); } }, [pathname]);
   const start = useCallback(() => { if (isTutorCallActive() || current.current.assistance.phase === 'calling') return; connectionAnnounced.current = false; setConversationRequested(true); setRequested(true); setAttempt(value => value + 1); }, []);
+  useWifiLensButtons(assistance.user && assistance.phase !== 'calling' && !onTutorCallScreen ? lens.wifiLensConnection.session : null, () => {
+    if (!requested) start();
+  });
   const stop = () => { release(); setConversationRequested(false); resume.current = null; retryCount.current = 0; lastUserTranscript.current = ''; setRequested(false); setSession(null); setEnded(true); if (pathRef.current === '/conversation') { if (router.canGoBack()) router.back(); else router.replace('/home'); } };
 
   useEffect(() => {
@@ -178,6 +188,13 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
     stop();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assistance.phase, onTutorCallScreen]);
+
+  async function exitFunction() {
+    actionController.current.abort();
+    actionController.current = new AbortController();
+    inject('interrupt');
+    return current.current.voice.execute('salir', { silent: true });
+  }
 
   async function runAction(action: AppAction, args: AppActionArgs, roles: string[]) {
     const definition = validateAppAction(action, args, roles);
@@ -210,7 +227,7 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
         if (options?.onStart) startingNarration.current.set(id, options.onStart);
         inject('narrate', id, text, pathRef.current, options?.priority);
       }), () => inject('interrupt'));
-      if (data.connected) { clearTimeout(startupTimer.current); retryCount.current = 0; resume.current ??= { history: [] }; }
+      if (data.connected) { inject('setMemory', rememberedContext.current); clearTimeout(startupTimer.current); retryCount.current = 0; resume.current ??= { history: [] }; }
       return;
     }
     if (data.type === 'narration_started') { startingNarration.current.get(data.id)?.(); startingNarration.current.delete(data.id); return; }
@@ -219,11 +236,24 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
       if (!ready.current && sessionRef.current) { ready.current = true; inject('setContext', pathRef.current); inject('start', { ticket: sessionRef.current.ticket, speed: initialSpeed.current, resume: resume.current, foreground: foreground.current && pathRef.current !== '/assistance-call' }); }
       return;
     }
+    if (data.type === 'memory_transcript' && ['user', 'assistant'].includes(data.role) && typeof data.text === 'string') {
+      const state = appControl.current();
+      const mode = state.screen === '/realtime-streaming' && isStreamingMode(state.mode) ? state.mode : 'conversacion';
+      rememberStreamingText(mode, data.role, data.text, 'voice');
+      return;
+    }
     if (data.type === 'user_turn_started') { service.current?.beginUserTurn?.(); return; }
     if (data.type === 'user_transcript') {
       if (typeof data.text === 'string') {
         lastUserTranscript.current = data.text.slice(0, 2000);
         if (explicitlyEndsConversation(lastUserTranscript.current)) stop();
+        else if (explicitlyExitsFunction(lastUserTranscript.current)) {
+          if (pathRef.current === '/conversation') stop();
+          else {
+            // Cancel pending tools before navigating so they cannot reopen a function.
+            await exitFunction();
+          }
+        }
       }
       return;
     }
@@ -247,7 +277,7 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
         result = { ok: true, screen: pathRef.current, function: appControl.current(), name: state.assistance.user?.name, roles,
           lens: { phase: state.lens.wifiLensConnection.phase, network: state.lens.networkPreference },
           assistance: state.assistance.phase, deviceTime: new Date().toISOString() };
-      } else if (plan.name === 'get_current_location') {
+      } else if (plan.name === 'get_current_location' || (plan.name === 'execute_anny_command' && plan.arguments.action === 'where')) {
         const location = await getExplorationLocation();
         const address = await reverseGeocodeLocation(location);
         result = { ok: true, address, latitude: location.latitude, longitude: location.longitude, approximate: location.accuracy == null || location.accuracy > 50, accuracyMeters: location.accuracy, measuredAt: location.timestamp };
@@ -258,7 +288,8 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
           if (!active.current || ownerTicket !== sessionRef.current?.ticket) return;
           const parsed = parseVoiceCommand(plan.arguments.text!);
           const command = parsed?.command;
-          if (command?.action === 'nearby') result = await runAction('search_places', {}, roles);
+          if (command?.action === 'exit') result = { ok: await exitFunction(), message: 'Se cerraron las funciones activas. La conversación sigue disponible.' };
+          else if (command?.action === 'nearby') result = await runAction('search_places', {}, roles);
           else if (command?.action === 'navigate') result = await runAction('prepare_trip', { destination: parsed!.destination, mode: parsed!.travelMode }, roles);
           else if (command && ['text', 'image', 'banknote'].includes(command.action)) result = await runAction('analyze_camera', { mode: command.action === 'text' ? 'read_text' : command.action === 'banknote' ? 'identify_currency' : 'describe_scene' }, roles);
           else if (command && ['streaming', 'streaming_mode'].includes(command.action)) result = await runAction('set_streaming', { enabled: true, mode: command.mode ?? 'viaje' }, roles);

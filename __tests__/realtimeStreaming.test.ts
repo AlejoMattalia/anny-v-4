@@ -1,3 +1,4 @@
+jest.mock('../src/lib/streaming-memory', () => ({ getMemoryOwner: () => 'pdv', beginMemorySession: jest.fn(), readStreamingMemory: jest.fn().mockResolvedValue(''), rememberStreamingText: jest.fn(), publishMemoryContext: jest.fn(), memoryInstructions: 'Historial: ' }));
 import { EventEmitter } from 'events';
 import { STREAMING_MODES, type StreamingMode } from '../src/services/StreamingModes';
 
@@ -138,4 +139,18 @@ it('discards a frame if the mode changes while image preparation is pending', as
   finish('compressed old frame');
   await cancelled;
   expect(mockEmit.mock.calls.some(([event]) => event === 'analyze')).toBe(false);
+});
+
+it('recovers the mode history as context and saves the current visual exchange', async () => {
+  const memory = require('../src/lib/streaming-memory');
+  memory.readStreamingMemory.mockResolvedValueOnce('Visita anterior: lácteos al fondo.');
+  setRealtimeMode('supermercado');
+  const result = analyzeRealtimeImage('image', '¿Dónde está la leche?');
+  await settle();
+  const request = mockEmit.mock.calls.find(([event]) => event === 'analyze')?.[1];
+  expect(request.query).toContain('Visita anterior: lácteos al fondo.');
+  mockSocket.emit('description', { text: 'Heladera a la derecha', mode: 'supermercado', requestId: request.requestId });
+  await expect(result).resolves.toBe('Heladera a la derecha');
+  expect(memory.rememberStreamingText).toHaveBeenCalledWith('supermercado', 'user', '¿Dónde está la leche?', 'vision');
+  expect(memory.rememberStreamingText).toHaveBeenCalledWith('supermercado', 'assistant', 'Heladera a la derecha', 'vision');
 });

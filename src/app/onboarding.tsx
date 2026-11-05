@@ -55,14 +55,6 @@ export default function OnboardingScreen() {
     },
   });
 
-  useEffect(() => {
-    if (loading || error || steps.length === 0) {
-      return;
-    }
-
-    void speak(`Paso ${activeIndex + 1} de ${steps.length}. Tocá escuchar descripción para oír el contenido.`);
-  }, [activeIndex, error, loading, steps.length]);
-
   async function finishOnboarding() {
     await markOnboardingSeen();
     router.replace('/');

@@ -4,6 +4,8 @@ import { Text } from 'react-native';
 import { ConversationProvider, useConversation } from '../../src/context/conversation-context';
 import { createVoiceConversation, endVoiceConversation } from '../../src/lib/voice-conversation';
 import { getExplorationLocation, reverseGeocodeLocation } from '../../src/lib/current-location';
+import { rememberStreamingText } from '../../src/lib/streaming-memory';
+import { useWifiLensButtons } from '../../src/context/useWifiLensButtons';
 import { appControl } from '../../src/services/AppControl';
 import { stopSpeaking } from '../../src/lib/voice';
 import { playConversationConnecting } from '../../src/services/ConversationConnectionCue';
@@ -24,6 +26,8 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 jest.mock('../../src/context/assistance-context', () => ({ useAssistance: () => mockAssistance }));
 jest.mock('../../src/context/voice-commands-context', () => ({ useVoiceCommands: () => mockVoice }));
 jest.mock('../../src/context/wifi-lens-context', () => ({ useWifiLens: () => ({ wifiLensConnection: { phase: 'connected' }, networkPreference: 'wifi' }) }));
+jest.mock('../../src/lib/streaming-memory', () => ({ setMemoryOwner: jest.fn(), rememberStreamingText: jest.fn(), subscribeMemoryContext: () => () => {} }));
+jest.mock('../../src/context/useWifiLensButtons', () => ({ useWifiLensButtons: jest.fn() }));
 jest.mock('../../src/lib/current-location', () => ({ getExplorationLocation: jest.fn(), reverseGeocodeLocation: jest.fn() }));
 jest.mock('../../src/lib/voice', () => ({ requestConversationMicrophone: jest.fn().mockResolvedValue(undefined), stopListening: jest.fn(), stopSpeaking: jest.fn() }));
 jest.mock('../../src/lib/voice-conversation', () => ({ voiceApiUrl: 'https://voice.test', createVoiceConversation: jest.fn(), endVoiceConversation: jest.fn() }));
@@ -221,4 +225,50 @@ it('answers where I am using the exploration fix with its real accuracy instead 
   const script = mockInject.mock.calls.at(-1)[0];
   expect(script).toContain('"ok":true'); expect(script).toContain('San Martín 120');
   expect(script).toContain('"accuracyMeters":85'); expect(script).toContain('"approximate":true');
+});
+
+it('returns the address for the canonical where command instead of silently discarding it', async () => {
+  (getExplorationLocation as jest.Mock).mockResolvedValueOnce({ latitude: -33.123, longitude: -64.349, accuracy: 20, timestamp: Date.now() });
+  (reverseGeocodeLocation as jest.Mock).mockResolvedValueOnce('San Martín 120, Río Cuarto');
+  await event({ type: 'tool', id: 'where-command', plan: { type: 'native', name: 'execute_anny_command', arguments: { text: 'dónde estoy', command: 'dónde estoy', action: 'where' } } });
+  expect(mockInject.mock.calls.at(-1)[0]).toContain('San Martín 120');
+  expect(mockVoice.execute).not.toHaveBeenCalled();
+});
+it('leaves streaming immediately on a spoken exit and keeps the conversation', async () => {
+  mockPath = '/realtime-streaming'; await act(async () => { tree.update(element()); });
+  await event({ type: 'user_transcript', text: 'Quiero salir del streaming' });
+  expect(mockVoice.execute).toHaveBeenCalledWith('salir', { silent: true });
+  expect(controls.running).toBe(true);
+});
+it('hangs up on a bare exit on the conversation screen', async () => {
+  await event({ type: 'user_transcript', text: 'Salir' });
+  expect(controls.running).toBe(false);
+  expect(endVoiceConversation).toHaveBeenCalled();
+});
+it('executes the exit tool without a touch confirmation', async () => {
+  await event({ type: 'tool', id: 'exit', plan: { type: 'native', name: 'execute_anny_command', arguments: { text: 'salir', command: 'salir', action: 'exit' } } });
+  expect(mockVoice.execute).toHaveBeenCalledWith('salir', { silent: true });
+  expect(mockInject.mock.calls.at(-1)[0]).toContain('"ok":true');
+});
+
+it('starts AI from the lens button during streaming without restarting an active conversation', async () => {
+  await act(async () => { controls.stop(); });
+  mockPath = '/realtime-streaming';
+  await act(async () => { tree.update(element()); });
+  (createVoiceConversation as jest.Mock).mockClear();
+  await act(async () => { (useWifiLensButtons as jest.Mock).mock.calls.at(-1)[1](); await flush(); });
+  expect(controls.running).toBe(true);
+  expect(createVoiceConversation).toHaveBeenCalledTimes(1);
+  await act(async () => { (useWifiLensButtons as jest.Mock).mock.calls.at(-1)[1](); await flush(); });
+  expect(createVoiceConversation).toHaveBeenCalledTimes(1);
+  expect(mockVoice.execute).not.toHaveBeenCalled();
+});
+
+it('records both speakers under the active streaming mode', async () => {
+  const cleanup = appControl.register('/realtime-streaming', () => ({ mode: 'supermercado' }), () => ({}));
+  await event({ type: 'memory_transcript', role: 'user', text: 'Busco leche' });
+  await event({ type: 'memory_transcript', role: 'assistant', text: 'Heladera a la derecha' });
+  expect(rememberStreamingText).toHaveBeenCalledWith('supermercado', 'user', 'Busco leche', 'voice');
+  expect(rememberStreamingText).toHaveBeenCalledWith('supermercado', 'assistant', 'Heladera a la derecha', 'voice');
+  cleanup();
 });

@@ -5,58 +5,8 @@ import { conversationIsActive } from '@/services/ConversationRuntime';
 import { speak } from '@/lib/voice';
 import { useWifiLens } from '@/context/wifi-lens-context';
 
-const SCREEN_ANNOUNCEMENTS: Record<string, string> = {
-  '/commands': 'Comandos de voz. Tocá un comando para escuchar qué hace. Para usarlo, tocá el micrófono o el botón de tus lentes y decilo.',
-  '/qr-scanner': 'Escáner de códigos. Apuntá al código QR o de barras. Podés usar la cámara del celular o la de los lentes.',
-  '/home':
-    'Inicio de Anny. Podés elegir Viajar, Explorar, Ayuda o Configuración. Para usar comandos de voz, tocá el micrófono de la barra inferior o el botón de tus lentes. Decí comandos para conocer las opciones. El menú permite acceder a tu perfil, tutorial y términos de uso.',
-  '/help':
-    'Sección Ayuda. Podés pedir asistencia remota a un tutor, escanear texto, imágenes y billetes, o abrir el streaming en tiempo real del lente o del celular.',
-  '/remote-assistance':
-    'Asistencia remota. Las cuentas PDV pueden pedir ayuda a sus tutores. Las cuentas tutor pueden aceptar solicitudes y comenzar una videollamada.',
-  '/tutors':
-    'Tutores y personas vinculadas. Podés vincular una cuenta por correo o código, editar su nombre o desvincularla.',
-  '/anny-board':
-    'Sección Lente Anny. Podés abrir el streaming en tiempo real de los lentes vinculados a tu cuenta.',
-  '/remote-cameras':
-    'Streaming de Lente Anny. Podés elegir una cámara vinculada o vincular una nueva con su código de activación.',
-  '/explore':
-    'Sección Explorar. Podés conocer tu ubicación, explorar el mapa o buscar lugares cercanos.',
-  '/visual-scanner':
-    'Asistencia visual. Podés cambiar entre Lentes y Celular con el botón junto a Detener voz. Apuntá la cámara y mantenela quieta. Anny escanea automáticamente con el intervalo de Configuración y lee el resultado en voz alta. Podés detener la voz o escanear ahora con los botones.',
-  '/map-explorer':
-    'Explorador de mapa. Podés mover el mapa, escribir el nombre de un lugar, seleccionar marcadores o centrar el mapa en tu ubicación.',
-  '/where-am-i':
-    'Dónde estoy. Anny buscará tu ubicación actual, leerá la dirección y te permitirá verla en el mapa.',
-  '/nearby-places':
-    'Lugares cercanos. Anny buscará comercios y servicios próximos. Podés escuchar cada lugar, verlo en el mapa o iniciar un viaje.',
-  '/travel':
-    'Sección Viajar. Podés planificar un viaje, iniciar un viaje ahora, simular un recorrido, abrir tus viajes guardados o consultar tus ubicaciones.',
-  '/plan-trip':
-    'Planificación de viaje. Podés elegir origen, destino y modo de transporte. Después podrás guardar el viaje o iniciarlo.',
-  '/start-trip':
-    'Iniciar viaje. Podés buscar el destino escribiendo, usar el micrófono o elegir un viaje guardado. Anny te guiará por voz durante el recorrido.',
-  '/saved-trips':
-    'Viajes guardados y favoritos. Podés escuchar los datos de cada viaje, cambiar el modo de transporte, iniciarlo, simularlo o eliminarlo.',
-  '/saved-locations':
-    'Mis ubicaciones. Podés seleccionar una ubicación guardada, agregar una nueva dirección o eliminar una ubicación.',
-  '/contacts':
-    'Contactos. Podés recorrer tu agenda, escuchar los datos de un contacto, marcarlo como favorito o llamarlo.',
-  '/bluetooth-devices':
-    'Dispositivos. Elegí WiFi o Hotspot y conectá una red.',
-  '/settings':
-    'Configuración. Podés revisar permisos, conexión de anteojos, brújula, velocidad de voz y velocidad de simulación.',
-  '/profile':
-    'Perfil. Podés revisar tu cuenta, editar tu información personal, abrir otras opciones o cerrar sesión.',
-  '/notifications':
-    'Notificaciones. Podés revisar el permiso del dispositivo, configurar el aviso anticipado de destino y enviar una notificación de prueba.',
-  '/training':
-    'Capacitaciones. Elegí un módulo para conocer sus actividades y escuchar cada paso.',
-  '/onboarding':
-    'Tutorial de Anny. Recorré los pasos y usá el botón Escuchar descripción para oír el contenido completo.',
-  '/terms':
-    'Términos de uso. En esta página podés consultar las condiciones de uso de Anny.',
-};
+const HOME_ANNOUNCEMENT =
+  'Inicio de Anny. Podés elegir Viajar, Explorar, Ayuda o Configuración. Para usar comandos de voz, tocá el micrófono de la barra inferior. El botón de tus lentes activa la IA. Decí comandos para conocer las opciones. El menú permite acceder a tu perfil, tutorial y términos de uso.';
 
 export function ScreenVoiceAnnouncer() {
   const pathname = usePathname();
@@ -69,14 +19,12 @@ export function ScreenVoiceAnnouncer() {
     announcedPath.current = pathname;
     // The visible connection dialog owns the startup announcement.
     if (connectionDialogOpen) return;
-    const announcement = SCREEN_ANNOUNCEMENTS[pathname];
-
-    if (!announcement || conversationIsActive()) {
+    if (pathname !== '/home' || conversationIsActive()) {
       return;
     }
 
     const timeout = setTimeout(() => {
-      void speak(announcement);
+      void speak(HOME_ANNOUNCEMENT);
     }, 250);
 
     return () => clearTimeout(timeout);

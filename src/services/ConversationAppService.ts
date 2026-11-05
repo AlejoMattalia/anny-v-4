@@ -132,6 +132,12 @@ export class ConversationAppService {
         ensureActive(); return appControl.run('analyze_camera', args);
       }
       case 'set_streaming': case 'analyze_stream': {
+        // Stopping must never wait for a camera, network or analysis to finish.
+        if (action === 'set_streaming' && args.enabled === false) {
+          ensureActive();
+          if (appControl.current().screen !== '/realtime-streaming') return { ok: true, streaming: false };
+          return appControl.run(action, { enabled: false });
+        }
         if (args.mode && !['viaje', 'facultad', 'supermercado', 'deporte', 'seguro'].includes(args.mode)) throw new Error('Modo de streaming no válido.');
         if (appControl.current().screen !== '/realtime-streaming') {
           if (args.enabled === false) return { ok: false, message: 'El streaming no está activo.' };

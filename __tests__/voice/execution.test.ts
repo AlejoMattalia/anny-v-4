@@ -84,11 +84,9 @@ it('blocks restricted commands and any command after logout', async () => {
   await execute('texto'); expect(router.navigate).not.toHaveBeenCalled(); expect(speak).toHaveBeenCalledWith('Tu cuenta no tiene acceso a esta función.');
   mockAssistance.user = null; await execute('contactos'); expect(router.navigate).not.toHaveBeenCalled();
 });
-it('executes recognized commands from the physical lens button through the same controller', async () => {
-  (listenOnce as jest.Mock).mockResolvedValueOnce('Anny contactos');
-  await act(async () => { (useWifiLensButtons as jest.Mock).mock.calls.at(-1)[1](); });
-  expect(listenOnce).toHaveBeenCalledWith(expect.objectContaining({ contextualStrings: expect.arrayContaining(['contactos', 'cancelar viaje', 'iniciar detección']) }));
-  expect(router.navigate).toHaveBeenCalledWith('/contacts');
+it('leaves the physical lens button to the AI conversation provider', () => {
+  expect(useWifiLensButtons).not.toHaveBeenCalled();
+  expect(listenOnce).not.toHaveBeenCalled();
 });
 it('does not execute a late transcript after the user cancels the microphone', async () => {
   let finish!: (text: string) => void;

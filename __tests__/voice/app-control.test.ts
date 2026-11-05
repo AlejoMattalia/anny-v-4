@@ -231,3 +231,12 @@ it('reads the places visible on the nearby screen instead of substituting a city
   expect(getNearbyPlaces).not.toHaveBeenCalled();
   expect(searchNearbyLocations).not.toHaveBeenCalled();
 });
+
+it('stops streaming immediately even while the camera is unavailable and analysis is busy', async () => {
+  const { service: control, navigate } = service();
+  const stop = jest.fn().mockResolvedValue({ ok: true, streaming: false });
+  cleanups.push(appControl.register('/realtime-streaming', () => ({ cameraReady: false, analyzing: true }), () => ({ set_streaming: stop })));
+  await expect(control.run('set_streaming', { enabled: false, camera: 'glasses', mode: 'viaje' }, new AbortController().signal)).resolves.toEqual({ ok: true, streaming: false });
+  expect(stop).toHaveBeenCalledWith({ enabled: false });
+  expect(navigate).not.toHaveBeenCalled();
+});

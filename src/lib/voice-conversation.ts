@@ -1,7 +1,7 @@
 import { getAuthSession } from './auth';
 import { conversationDeadline } from '../services/ConversationStartup';
 
-export const voiceApiUrl = (process.env.EXPO_PUBLIC_VOICE_API_URL || 'https://anny-voice.3.15.63.191.sslip.io').replace(/\/$/, '');
+export const voiceApiUrl = (process.env.EXPO_PUBLIC_VOICE_API_URL || 'https://3.15.63.191').replace(/\/$/, '');
 export type ConversationSession = { ticket: string; url: string; expiresIn: number; maxSessionSeconds: number };
 
 export async function createVoiceConversation(signal: AbortSignal): Promise<ConversationSession> {

@@ -1,3 +1,4 @@
+import { getMemoryOwner, beginMemorySession, readStreamingMemory, rememberStreamingText, publishMemoryContext, memoryInstructions } from './streaming-memory';
 import { io, type Socket } from 'socket.io-client';
 import { normalizeStreamingCurrency } from '../services/StreamingResponse';
 import { STREAMING_MODES, type StreamingMode } from '../services/StreamingModes';
@@ -10,6 +11,8 @@ export const realtimeAiUrl =
   process.env.EXPO_PUBLIC_REALTIME_AI_URL?.replace(/\/$/, '') ||
   'http://ec2-3-15-63-191.us-east-2.compute.amazonaws.com';
 let mode: StreamingMode = 'viaje';
+let memoryContext: Promise<string> | null = null;
+let memoryOwner = '';
 let modeVersion = 0;
 const pending = new Set<() => void>();
 let socket: Socket | null = null;
@@ -64,28 +67,36 @@ export async function checkRealtimeAiHealth() {
 }
 
 export async function analyzeRealtimeImage(image: string, query?: string, options: { fast?: boolean } = {}) {
+  const requestOwner = getMemoryOwner();
+  if (memoryOwner !== requestOwner) { memoryOwner = requestOwner; memoryContext = null; }
   const requestMode = mode;
   const version = modeVersion;
   const activeSocket = getSocket();
   const fineDetail = requestMode === 'facultad' || requestMode === 'supermercado';
-  const [preparedImage] = await Promise.all([prepareVisionUpload(image, options.fast && !fineDetail ? 'stream-fast' : 'stream'), connect(activeSocket)]);
-  if (version !== modeVersion) throw new Error('Análisis cancelado por cambio de modo.');
+  memoryContext ??= readStreamingMemory(requestMode).then(text => { if (version === modeVersion && requestOwner === getMemoryOwner()) publishMemoryContext(`Modo ${requestMode}. ${text || 'No hay visitas anteriores disponibles para este modo.'}`); return text; });
+  const [preparedImage, , remembered] = await Promise.all([prepareVisionUpload(image, options.fast && !fineDetail ? 'stream-fast' : 'stream'), connect(activeSocket), memoryContext]);
+  if (version !== modeVersion || requestOwner !== getMemoryOwner()) throw new Error('Análisis cancelado por cambio de modo.');
   const requestId = ++nextRequestId;
   const requestedQuery = query?.trim();
   const queryToSend = requestedQuery
     ? `${requestedQuery} Respondé en una frase breve y completa, de hasta 20 palabras.`
     : options.fast ? `${STREAMING_MODES[requestMode].query} Priorizá una sola referencia útil en hasta 12 palabras.` : STREAMING_MODES[requestMode].query;
-  const groundedQuery = `${queryToSend} Basate solo en lo visible: identificá objetos concretos y su posición relativa. No inventes textos, precios ni distancias; si un detalle no se distingue, indicá que no es legible.`;
+  const groundedQuery = `${remembered ? memoryInstructions + remembered + "\nFIN DEL HISTORIAL. Escena actual: " : ""}${queryToSend} Basate solo en lo visible: identificá objetos concretos y su posición relativa. No inventes textos, precios ni distancias; si un detalle no se distingue, indicá que no es legible.`;
 
   return new Promise<string>((resolve, reject) => {
     const cancel = () => finish(new Error('Análisis cancelado por cambio de modo.'));
     const cancelTimer = streamingTimeout(() => finish(new Error('Anny tardó demasiado en responder.')), 30000);
     const onDescription = (payload: Description) => {
+      if (requestOwner !== getMemoryOwner()) { finish(new Error('La cuenta cambió.')); return; }
       if ((payload.requestId !== undefined && payload.requestId !== requestId) ||
           (payload.mode !== undefined && payload.mode !== requestMode)) return;
       const text = payload.text?.trim();
       if (!text) finish(new Error('Anny no devolvió una descripción.'));
-      else finish(undefined, normalizeStreamingCurrency(text));
+      else {
+        if (query?.trim()) rememberStreamingText(requestMode, 'user', query.trim(), 'vision');
+        rememberStreamingText(requestMode, 'assistant', normalizeStreamingCurrency(text), 'vision');
+        finish(undefined, normalizeStreamingCurrency(text));
+      }
     };
     const onError = (payload: VisionError) => {
       if (payload.requestId !== undefined && payload.requestId !== requestId) return;
@@ -112,6 +123,10 @@ export async function analyzeRealtimeImage(image: string, query?: string, option
 export function setRealtimeMode(nextMode: StreamingMode) {
   modeVersion += 1;
   mode = nextMode;
+  beginMemorySession();
+  const revision = modeVersion;
+  const requestOwner = getMemoryOwner(); memoryOwner = requestOwner;
+  memoryContext = readStreamingMemory(nextMode).then(text => { if (revision === modeVersion && requestOwner === getMemoryOwner()) publishMemoryContext(`Modo ${nextMode}. ${text || 'No hay visitas anteriores disponibles para este modo.'}`); return text; });
   pending.forEach(cancel => cancel());
   if (socket?.connected) socket.emit('set_mode', { mode });
 }
@@ -120,5 +135,7 @@ export function disconnectRealtimeAi() {
   modeVersion += 1;
   socket?.disconnect();
   socket = null;
+  memoryContext = null;
+  publishMemoryContext('No hay streaming activo. No reutilices recorridos anteriores sin confirmar lugar y modo.');
   mode = 'viaje';
 }

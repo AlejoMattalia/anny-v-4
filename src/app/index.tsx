@@ -42,11 +42,6 @@ export default function SignInScreen() {
         return;
       }
 
-      if (mounted) {
-        setTimeout(() => {
-          void speak('Iniciar sesión. Ingrese su correo y contraseña. Si deseas dictarlos, tocá el botón del micrófono.');
-        }, 900);
-      }
     }
 
     redirectFirstTimeUser();

@@ -3,7 +3,7 @@ import { AppState, Linking } from 'react-native';
 import { router, useIsFocused, usePathname, type Href } from 'expo-router';
 import { useAssistance } from './assistance-context';
 import { useWifiLens } from './wifi-lens-context';
-import { useWifiLensButtons } from './useWifiLensButtons';
+// import { useWifiLensButtons } from './useWifiLensButtons';
 import { getExplorationLocation, reverseGeocodeLocation } from '../lib/current-location';
 import { getLastSpokenText, listenOnce, setGuidancePaused, speak, stopListening, stopSpeaking } from '../lib/voice';
 import { interruptConversation, isTutorCallActive } from '../services/ConversationRuntime';
@@ -145,7 +145,8 @@ export function VoiceCommandsProvider({ children }: PropsWithChildren) {
       if (session === generation.current) { busy.current = false; setListening(false); }
     }
   }, [execute]);
-  useWifiLensButtons(assistance.user && pathname !== '/realtime-streaming' && pathname !== '/assistance-call' && pathname !== '/conversation' ? lens.wifiLensConnection.session : null,
-    () => { if (busy.current) cancel(); else void listen(); });
+  // El botón del lente ahora inicia la IA desde ConversationProvider.
+  // useWifiLensButtons(assistance.user && pathname !== '/realtime-streaming' && pathname !== '/assistance-call' && pathname !== '/conversation' ? lens.wifiLensConnection.session : null,
+  //   () => { if (busy.current) cancel(); else void listen(); });
   return <Context.Provider value={{ listening, listen, cancel, execute, register }}>{children}</Context.Provider>;
 }

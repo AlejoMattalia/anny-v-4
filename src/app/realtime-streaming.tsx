@@ -32,7 +32,7 @@ import { useAppControl } from '@/context/useAppControl';
 import { useVoiceActions, useVoiceCommands } from '@/context/voice-commands-context';
 import WifiLensCamera, { type WifiLensCameraHandle } from '@/components/WifiLensCamera';
 import { useWifiLens } from '@/context/wifi-lens-context';
-import { useWifiLensButtons } from '@/context/useWifiLensButtons';
+// import { useWifiLensButtons } from '@/context/useWifiLensButtons';
 import { listenOnce, speak, stopListening, stopSpeaking } from '@/lib/voice';
 import { canRunStreaming } from '@/services/StreamingActivity';
 import { streamingInterval } from '@/services/StreamingClock';
@@ -159,10 +159,11 @@ export default function RealtimeStreamingScreen() {
     setCameraAttempt((attempt) => attempt + 1);
   }, []);
   const handleWifiReady = useCallback((ready: boolean) => setIsPreparingGlasses(!ready), []);
-  useWifiLensButtons(focused ? wifiLensConnection.session : null, () => {
-    if (isListening) stopListening();
-    else void askAnny();
-  });
+  // El botón del lente ahora inicia la IA, también durante el streaming.
+  // useWifiLensButtons(focused ? wifiLensConnection.session : null, () => {
+  //   if (isListening) stopListening();
+  //   else void askAnny();
+  // });
 
   const captureAndSend = useCallback(async (query?: string, options: { silent?: boolean; force?: boolean } = {}) => {
     if (
