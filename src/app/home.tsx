@@ -197,8 +197,8 @@ export default function HomeScreen() {
           {/* Panel de placa ESP32 con Activación deshabilitado; conexión de lentes WiFi como v3. */}
           {assistance.role !== 'TUTOR' && <WifiLensConnectionCard />}
           <Pressable accessibilityRole="button" style={{ padding: 20, borderRadius: 18, backgroundColor: '#E9E4EA', marginBottom: 16 }} onPress={() => router.push('/remote-assistance')}>
-            <Text style={{ fontSize: 21, fontWeight: '700', color: '#3C1642' }}>{assistance.role === 'TUTOR' ? 'Cuenta tutor · Asistencia remota' : 'Ayuda de familiar o tutor'}</Text>
-            <Text style={{ marginTop: 8, fontSize: 17, color: '#444' }}>{assistance.incoming ? `${assistance.incoming.name || 'Una persona vinculada'} necesita ayuda` : assistance.role === 'TUTOR' ? 'Ver solicitudes y personas vinculadas' : 'Pedir ayuda por videollamada'}</Text>
+            <Text style={{ fontSize: 21, fontWeight: '700', color: '#3C1642' }}>{assistance.role === 'TUTOR' ? 'Asistencia remota' : 'Pedir ayuda'}</Text>
+            {!!assistance.incoming && <Text style={{ marginTop: 8, fontSize: 17, color: '#444' }}>{assistance.incoming.name || 'Una persona vinculada'} necesita ayuda</Text>}
           </Pressable>
 
           <View style={styles.sections}>

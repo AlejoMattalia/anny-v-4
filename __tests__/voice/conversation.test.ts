@@ -1,4 +1,4 @@
-import { validateConversationPlan, conversationNeedsConfirmation } from '../../src/services/ConversationActions';
+import { validateConversationPlan } from '../../src/services/ConversationActions';
 import { createVoiceConversation, endVoiceConversation, voiceApiUrl } from '../../src/lib/voice-conversation';
 import { getAuthSession } from '../../src/lib/auth';
 
@@ -39,9 +39,6 @@ it('rejects forged bridge actions, role escalation and conversation loops', () =
   expect(() => validateConversationPlan({ ...plan, arguments: { ...plan.arguments, text: 'salir' } }, ['PDV'])).toThrow();
   expect(() => validateConversationPlan({ ...plan, name: 'shell' }, ['PDV'])).toThrow();
   expect(() => validateConversationPlan({ ...plan, arguments: { text: 'conversar', command: 'conversar', action: 'conversation' } }, ['PDV'])).toThrow();
-  expect(conversationNeedsConfirmation('help')).toBe(true);
-  expect(conversationNeedsConfirmation('wifi')).toBe(true);
-  expect(conversationNeedsConfirmation('image')).toBe(false);
 });
 it('preserves the spoken destination and transport when approving a navigation action', () => {
   const plan = { type: 'native', name: 'execute_anny_command', arguments: { text: 'ir a Hospital Córdoba en colectivo', command: 'ir a', action: 'navigate' } };

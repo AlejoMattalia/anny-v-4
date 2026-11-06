@@ -14,4 +14,3 @@ export function validateConversationPlan(input: unknown, roles: string[]): Conve
   if (parsed.command.scope || ['cancel_trip', 'pause_guidance', 'resume_guidance', 'stop_detection', 'conversation'].includes(parsed.command.action)) throw new Error('Esta acción requiere otra pantalla activa.');
   return plan;
 }
-export const conversationNeedsConfirmation = (action?: string) => ['help', 'wifi', 'hotspot'].includes(action ?? '');

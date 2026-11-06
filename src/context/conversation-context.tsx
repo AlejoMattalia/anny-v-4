@@ -1,6 +1,6 @@
 import { router, usePathname, type Href } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { Alert, AppState, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { WebView as WebViewInstance, WebViewMessageEvent } from 'react-native-webview';
@@ -18,26 +18,12 @@ import { requestConversationMicrophone, stopListening, stopSpeaking } from '@/li
 import { conversationDeadline, releasePreviousVoice } from '@/services/ConversationStartup';
 import { loadSettings } from '@/lib/settings-storage';
 import { clearAuthSession } from '@/lib/auth';
-import { conversationNeedsConfirmation, validateConversationPlan } from '@/services/ConversationActions';
+import { validateConversationPlan } from '@/services/ConversationActions';
 import { appControl, validateAppAction, type AppAction, type AppActionArgs } from '@/services/AppControl';
 import { ConversationAppService } from '@/services/ConversationAppService';
 import { isTutorCallActive, setConversationNarrator, setConversationRequested, withoutToolNarration } from '@/services/ConversationRuntime';
 import { parseVoiceCommand } from '@/services/VoiceCommands';
 import { explicitlyEndsConversation, explicitlyExitsFunction } from '@/services/ConversationEnd';
-
-const confirmationMessages: Record<string, string> = {
-  help: '¿Querés enviar una solicitud de ayuda a tus tutores?', request_assistance: '¿Querés enviar una solicitud de ayuda a tus tutores?',
-  cancel_trip: '¿Querés finalizar el viaje activo?', call_contact: '¿Querés abrir el marcador para llamar al contacto elegido?',
-  update_profile: '¿Querés guardar estos cambios en tu perfil?', link_tutor: '¿Querés vincular esta cuenta?', unlink_tutor: '¿Querés desvincular esta cuenta?',
-  delete_saved_location: '¿Querés eliminar esta ubicación guardada?', answer_assistance: '¿Querés responder a esta solicitud de asistencia?',
-  delete_saved_trip: '¿Querés eliminar este viaje guardado?', logout: '¿Querés cerrar tu sesión de Anny?',
-};
-const confirmAction = (action: string) => new Promise<boolean>(resolve => Alert.alert(
-  action === 'help' || action === 'request_assistance' ? 'Solicitar asistencia' : 'Confirmar acción',
-  confirmationMessages[action] || '¿Querés continuar con esta acción?',
-  [{ text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) }, { text: 'Continuar', onPress: () => resolve(true) }],
-  { cancelable: true, onDismiss: () => resolve(false) },
-));
 
 const ConversationContext = createContext<{ running: boolean; start: () => void; stop: () => void }>({ running: false, start: () => {}, stop: () => {} });
 export const useConversation = () => useContext(ConversationContext);
@@ -197,8 +183,7 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
   }
 
   async function runAction(action: AppAction, args: AppActionArgs, roles: string[]) {
-    const definition = validateAppAction(action, args, roles);
-    if ('confirm' in definition && definition.confirm && !await confirmAction(action)) return { ok: false, message: 'La persona canceló la acción.' };
+    validateAppAction(action, args, roles);
     if (!active.current) throw new Error('Conversación finalizada.');
     if (action === 'end_conversation') {
       if (!explicitlyEndsConversation(lastUserTranscript.current)) return { ok: false, message: 'La persona no pidió finalizar la conversación. Seguí con su pedido; indicar un destino o abrir una función nunca cierra la voz.' };
@@ -282,21 +267,17 @@ export function ConversationProvider({ children, loadWebView = defaultWebViewLoa
         const address = await reverseGeocodeLocation(location);
         result = { ok: true, address, latitude: location.latitude, longitude: location.longitude, approximate: location.accuracy == null || location.accuracy > 50, accuracyMeters: location.accuracy, measuredAt: location.timestamp };
       } else {
-        if (conversationNeedsConfirmation(plan.arguments.action) && !await confirmAction(plan.arguments.action!)) {
-          result = { ok: false, message: 'La persona canceló la acción. No se ejecutó.' };
-        } else {
-          if (!active.current || ownerTicket !== sessionRef.current?.ticket) return;
-          const parsed = parseVoiceCommand(plan.arguments.text!);
-          const command = parsed?.command;
-          if (command?.action === 'exit') result = { ok: await exitFunction(), message: 'Se cerraron las funciones activas. La conversación sigue disponible.' };
-          else if (command?.action === 'nearby') result = await runAction('search_places', {}, roles);
-          else if (command?.action === 'navigate') result = await runAction('prepare_trip', { destination: parsed!.destination, mode: parsed!.travelMode }, roles);
-          else if (command && ['text', 'image', 'banknote'].includes(command.action)) result = await runAction('analyze_camera', { mode: command.action === 'text' ? 'read_text' : command.action === 'banknote' ? 'identify_currency' : 'describe_scene' }, roles);
-          else if (command && ['streaming', 'streaming_mode'].includes(command.action)) result = await runAction('set_streaming', { enabled: true, mode: command.mode ?? 'viaje' }, roles);
-          else {
-            const ok = await withoutToolNarration(() => state.voice.execute(plan.arguments.text!, { silent: true }));
-            result = { ok, message: ok ? 'El comando fue ejecutado por la app. La conversación sigue disponible.' : 'No se pudo ejecutar el comando en esta pantalla.' };
-          }
+        if (!active.current || ownerTicket !== sessionRef.current?.ticket) return;
+        const parsed = parseVoiceCommand(plan.arguments.text!);
+        const command = parsed?.command;
+        if (command?.action === 'exit') result = { ok: await exitFunction(), message: 'Se cerraron las funciones activas. La conversación sigue disponible.' };
+        else if (command?.action === 'nearby') result = await runAction('search_places', {}, roles);
+        else if (command?.action === 'navigate') result = await runAction('prepare_trip', { destination: parsed!.destination, mode: parsed!.travelMode }, roles);
+        else if (command && ['text', 'image', 'banknote'].includes(command.action)) result = await runAction('analyze_camera', { mode: command.action === 'text' ? 'read_text' : command.action === 'banknote' ? 'identify_currency' : 'describe_scene' }, roles);
+        else if (command && ['streaming', 'streaming_mode'].includes(command.action)) result = await runAction('set_streaming', { enabled: true, mode: command.mode ?? 'viaje' }, roles);
+        else {
+          const ok = await withoutToolNarration(() => state.voice.execute(plan.arguments.text!, { silent: true }));
+          result = { ok, message: ok ? 'El comando fue ejecutado por la app. La conversación sigue disponible.' : 'No se pudo ejecutar el comando en esta pantalla.' };
         }
       }
       if (active.current && ownerTicket === sessionRef.current?.ticket) inject('result', data.id, result);

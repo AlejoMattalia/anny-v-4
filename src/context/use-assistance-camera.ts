@@ -38,13 +38,12 @@ export function useAssistanceCamera({ role, callId, localAvailable, foreground }
       }
     } catch {
       if (request !== revision.current) return;
-      setNotice('No se pudo abrir el lente del servidor.');
+      setNotice('No se pudo abrir el video de lentes.');
     } finally {
       if (request === revision.current) setChoosing(false);
     }
     if (request !== revision.current) return;
     setRemoteCamera(null); setGlasses(current.current.localAvailable);
-    if (!current.current.localAvailable) setNotice('Lente del servidor no disponible. Usando cámara del celular.');
   }, [role]);
 
   useEffect(() => {

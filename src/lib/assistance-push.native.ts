@@ -46,3 +46,7 @@ export async function requestAssistancePushPermission() {
   initialize();
   return OneSignal.Notifications.requestPermission(false);
 }
+export async function hasAssistancePushPermission() {
+  initialize();
+  return OneSignal.Notifications.getPermissionAsync();
+}

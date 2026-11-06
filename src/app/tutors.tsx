@@ -36,9 +36,8 @@ export default function TutorsScreen() {
   return <SafeAreaView style={styles.screen}><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <Pressable accessibilityRole="button" onPress={() => router.back()}><Text style={styles.link}>‹ Volver</Text></Pressable>
     <Text accessibilityRole="header" style={styles.title}>{role === 'TUTOR' ? 'Personas vinculadas' : 'Mis tutores'}</Text>
-    <Text style={styles.description}>Vinculá una cuenta existente con su correo o código de usuario, como en Anny v3.</Text>
     <TextInput accessibilityLabel="Correo o código de usuario" style={styles.input} autoCapitalize="none" autoCorrect={false} value={email} onChangeText={setEmail} placeholder="Correo o código de usuario" keyboardType="email-address" />
-    {inviting && <><Text style={styles.description}>La cuenta no existe. Podés invitarla como tutor.</Text><TextInput accessibilityLabel="Nombre del tutor" style={styles.input} value={name} onChangeText={setName} placeholder="Nombre del tutor" /></>}
+    {inviting && <><Text style={styles.description}>Cuenta no encontrada.</Text><TextInput accessibilityLabel="Nombre del tutor" style={styles.input} value={name} onChangeText={setName} placeholder="Nombre del tutor" /></>}
     <Pressable accessibilityRole="button" disabled={busy || !email.trim() || !role || (inviting && !name.trim())} style={styles.button} onPress={() => void run(async () => {
       if (!user?._id || !role) return;
       if (inviting) { await inviteTutor(name, email); setInviting(false); setEmail(''); setName(''); setMessage('Invitación enviada.'); }

@@ -81,14 +81,14 @@ export default function AssistanceCallScreen() {
       send: (frame, signal) => sendAssistanceFrame(call, frame, signal),
       onFailure: () => {
         void chooseSource(false); media.current?.sendSource(false);
-        setVideoError('No se pudo compartir el video de los lentes. Usando cámara del celular.');
+        setVideoError('Sin video de lentes. Usando celular.');
       },
     });
   }, [call, role, connected, usingGlasses, ready, foreground, directLensVideo, remoteCamera, choosing, chooseSource]);
 
   if (!call || !role) return null;
   return <SafeAreaView style={styles.screen}>
-    <Text style={styles.title}>Videollamada de asistencia</Text>
+    <Text style={styles.title}>Videollamada</Text>
     <View style={styles.video}>
       {Platform.OS !== 'web' && !error && <AssistanceMedia key={attempt} ref={media} role={role} glasses={usingGlasses} serverVideo={!!remoteCamera}
         onConnected={() => { setConnected(true); void speak('Videollamada iniciada.'); }}
@@ -98,32 +98,32 @@ export default function AssistanceCallScreen() {
         onError={message => { setError(message); setConnected(false); }} />}
       {remoteCamera && remoteCamera.expiresAt > playbackRequestedAt && connected && foreground && !error && <View style={StyleSheet.absoluteFill}>
         <RemoteCameraStream key={`${remoteCamera.cameraId}:${feedAttempt}`} streamUrl={remoteCamera.streamUrl}
-          onError={() => setVideoError('No se pudo cargar el lente del servidor. Podés reintentar o cambiar a celular.')}
-          onHttpError={() => setVideoError('El servidor rechazó la reproducción del lente. Podés reintentar.')}
+          onError={() => setVideoError('No se pudo cargar el video de lentes.')}
+          onHttpError={() => setVideoError('No se pudo abrir el video de lentes.')}
         />
       </View>}
-      {remoteCamera && remoteCamera.expiresAt <= playbackRequestedAt && connected && foreground && !error && <View style={styles.center}><ActivityIndicator color="#FFFFFF" /><Text style={styles.message}>Reconectando cámara del servidor…</Text></View>}
+      {remoteCamera && remoteCamera.expiresAt <= playbackRequestedAt && connected && foreground && !error && <View style={styles.center}><ActivityIndicator color="#FFFFFF" /><Text style={styles.message}>Reconectando cámara…</Text></View>}
       {!remoteCamera && usingGlasses && connected && foreground && !error && (role === 'PDV' || !directLensVideo) && <View style={StyleSheet.absoluteFill}>
         {role === 'PDV' ? <WifiLensCamera ref={camera} onReady={setReady} /> : <WebView key={feedAttempt}
           source={{ uri: `${assistanceVideoUrl}/video_feed/${call.streamPort}/${encodeURIComponent(call.streamCode)}` }}
           style={styles.video} scrollEnabled={false} accessibilityLabel="Cámara de los lentes"
-          onError={() => { setVideoError('No se pudo cargar el video de los lentes. Podés reintentar o cambiar a celular.'); }}
-          onHttpError={() => { setVideoError('El servidor de los lentes no respondió. Podés reintentar o cambiar a celular.'); }} />}
+          onError={() => { setVideoError('No se pudo cargar el video de lentes.'); }}
+          onHttpError={() => { setVideoError('Los lentes no responden.'); }} />}
       </View>}
       {!foreground && <Text style={styles.message}>Volvé a Anny para ver el video.</Text>}
-      {!connected && !error && foreground && <View style={styles.center}><ActivityIndicator color="#FFFFFF" size="large" /><Text style={styles.message}>Conectando llamada…</Text></View>}
-      {!!error && <View style={styles.center}><Text accessibilityRole="alert" style={styles.message}>{error}</Text><Pressable accessibilityRole="button" style={styles.button} onPress={() => { setError(''); setConnected(false); setDirectLensVideo(false); setAttempt(value => value + 1); }}><Text style={styles.buttonText}>Reintentar conexión</Text></Pressable></View>}
+      {!connected && !error && foreground && <View style={styles.center}><ActivityIndicator color="#FFFFFF" size="large" /><Text style={styles.message}>Conectando…</Text></View>}
+      {!!error && <View style={styles.center}><Text accessibilityRole="alert" style={styles.message}>{error}</Text><Pressable accessibilityRole="button" style={styles.button} onPress={() => { setError(''); setConnected(false); setDirectLensVideo(false); setAttempt(value => value + 1); }}><Text style={styles.buttonText}>Reintentar</Text></Pressable></View>}
     </View>
     {!!videoError && <Text accessibilityRole="alert" style={styles.message}>{videoError}</Text>}
     {!!notice && <Text accessibilityRole="alert" style={styles.message}>{notice}</Text>}
-    {usingGlasses && (remoteCamera || role === 'TUTOR') && !!videoError && <Pressable accessibilityRole="button" style={styles.button} onPress={() => { setVideoError(''); setPlaybackRequestedAt(Date.now()); setFeedAttempt(value => value + 1); }}><Text style={styles.buttonText}>Reintentar video de lentes</Text></Pressable>}
-    {connected && <Pressable accessibilityRole="button" disabled={choosing} style={styles.button} onPress={() => selectSource(!usingGlasses)}><Text style={styles.buttonText}>{choosing ? 'Conectando lente del servidor…' : usingGlasses ? 'Usar cámara del celular' : 'Usar cámara de los lentes'}</Text></Pressable>}
-    <Pressable accessibilityRole="button" style={[styles.button, styles.hangup]} onPress={() => void endCall()}><Text style={styles.buttonText}>Finalizar llamada</Text></Pressable>
+    {usingGlasses && (remoteCamera || role === 'TUTOR') && !!videoError && <Pressable accessibilityRole="button" style={styles.button} onPress={() => { setVideoError(''); setPlaybackRequestedAt(Date.now()); setFeedAttempt(value => value + 1); }}><Text style={styles.buttonText}>Reintentar video</Text></Pressable>}
+    {connected && <Pressable accessibilityRole="button" accessibilityLabel={usingGlasses ? 'Usar cámara del celular' : 'Usar cámara de los lentes'} disabled={choosing} style={styles.button} onPress={() => selectSource(!usingGlasses)}><Text style={styles.buttonText}>{choosing ? 'Conectando cámara…' : usingGlasses ? 'Usar celular' : 'Usar lentes'}</Text></Pressable>}
+    <Pressable accessibilityRole="button" accessibilityLabel="Finalizar llamada" style={[styles.button, styles.hangup]} onPress={() => void endCall()}><Text style={styles.buttonText}>Colgar</Text></Pressable>
   </SafeAreaView>;
 }
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#17111B', padding: 16, gap: 14 }, title: { color: '#FFF', fontSize: 23, fontWeight: '700', paddingVertical: 10 },
   video: { flex: 1, backgroundColor: '#000', borderRadius: 16, overflow: 'hidden' }, center: { ...StyleSheet.absoluteFill, padding: 24, alignItems: 'center', justifyContent: 'center', gap: 20, backgroundColor: '#17111B' },
   message: { color: '#FFF', fontSize: 18, textAlign: 'center', lineHeight: 26 }, button: { backgroundColor: '#67416E', padding: 18, alignItems: 'center', borderRadius: 16 },
-  buttonText: { fontSize: 18, color: '#FFF', fontWeight: '700' }, hangup: { backgroundColor: '#B61D42' },
+  buttonText: { fontSize: 18, color: '#FFF', fontWeight: '700', alignSelf: 'stretch', textAlign: 'center' }, hangup: { backgroundColor: '#B61D42' },
 });

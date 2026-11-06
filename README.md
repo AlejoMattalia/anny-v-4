@@ -136,10 +136,15 @@ Se conserva el protocolo de `anny-app-v3`: `/group/list-mobile`,
 `/group/add-user-chat`, `/notification/help`, `help-accepted`, `help-ignored`,
 `response-camera`, `pending-camera` y `finalize-help`. El PDV envía su ubicación;
 el tutor acepta, puede verla en el mapa e inicia la videollamada. OneSignal
-identifica la instalación con el tag `user_id`, igual que v3. Activar **Avisos de
-asistencia** en el teléfono del tutor; al cerrar sesión se retira esa asociación.
+identifica la instalación con el tag `user_id`, igual que v3. **Activar avisos**
+aparece sólo si falta el permiso; al cerrar sesión se retira esa asociación.
 Mientras espera, el PDV consulta la respuesta de cámara cada dos segundos por
 un máximo de 65 segundos. Cancelar impide abrir llamadas por respuestas tardías.
+
+Las pantallas de asistencia muestran las acciones y estados breves, sin párrafos
+explicativos ni coordenadas. El tutor usa Aceptar, Llamar y Ver ubicación; durante
+la llamada están disponibles Usar celular/Usar lentes y Colgar. Los controles
+mantienen sus etiquetas accesibles y los errores siguen visibles.
 
 La llamada utiliza Voximplant y los mensajes `SHOW_GLASSES` / `SHOW_CAMERA`
 de v3. El audio prioriza el lente o auricular Bluetooth que el sistema tenga
@@ -593,3 +598,9 @@ un límite de espera y los errores del caché de Android no impiden consultar GP
 Cuando comienza una videollamada con un tutor, se finaliza la sesión de IA,
 se libera su micrófono y se cancela el reconocimiento de comandos. Las lecturas
 automáticas se silencian durante la llamada; no se reabre la IA al colgar.
+
+Los pedidos explícitos a la IA se ejecutan sin el modal de confirmar/continuar,
+incluida la solicitud de asistencia a tutores. Se conserva la validación de
+cuenta, rol y parámetros y la protección contra ejecutar dos veces la misma
+llamada de herramienta. Si faltan datos o hay opciones ambiguas, la IA los
+consulta; los permisos del sistema y el marcador telefónico mantienen su flujo.

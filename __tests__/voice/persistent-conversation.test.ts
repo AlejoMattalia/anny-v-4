@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 import { ConversationProvider, useConversation } from '../../src/context/conversation-context';
 import { createVoiceConversation, endVoiceConversation } from '../../src/lib/voice-conversation';
 import { getExplorationLocation, reverseGeocodeLocation } from '../../src/lib/current-location';
@@ -249,6 +249,35 @@ it('executes the exit tool without a touch confirmation', async () => {
   await event({ type: 'tool', id: 'exit', plan: { type: 'native', name: 'execute_anny_command', arguments: { text: 'salir', command: 'salir', action: 'exit' } } });
   expect(mockVoice.execute).toHaveBeenCalledWith('salir', { silent: true });
   expect(mockInject.mock.calls.at(-1)[0]).toContain('"ok":true');
+});
+
+it.each(['request_assistance', 'call_contact', 'cancel_trip', 'update_profile', 'link_tutor', 'unlink_tutor', 'delete_saved_location', 'delete_saved_trip'])('executes the requested %s action once without a confirmation modal', async action => {
+  const service = (ConversationAppService as jest.Mock).mock.results.at(-1)!.value;
+  service.run.mockResolvedValueOnce({ ok: true, message: 'Acción ejecutada.' });
+  const tool = { type: 'tool', id: 'direct-action', plan: { type: 'native', name: 'run_app_action', arguments: { action, parameters: {} } } };
+  await event(tool);
+  await event(tool);
+  expect(Alert.alert).not.toHaveBeenCalled();
+  expect(service.run).toHaveBeenCalledTimes(1);
+  expect(service.run).toHaveBeenCalledWith(action, {}, expect.any(AbortSignal));
+  expect(mockInject.mock.calls.at(-1)[0]).toContain('"ok":true');
+});
+
+it.each([['ayuda', 'help'], ['wifi', 'wifi'], ['hotspot', 'hotspot']])('executes the canonical %s command without a confirmation modal', async (command, action) => {
+  await event({ type: 'tool', id: 'direct-command', plan: { type: 'native', name: 'execute_anny_command', arguments: { text: command, command, action, requiresConfirmation: true } } });
+  expect(Alert.alert).not.toHaveBeenCalled();
+  expect(mockVoice.execute).toHaveBeenCalledWith(command, { silent: true });
+  expect(mockInject.mock.calls.at(-1)[0]).toContain('"ok":true');
+});
+
+it('still rejects assistance requests from a tutor without executing them', async () => {
+  mockAssistance.user = { _id: 'tutor', roles: [{ name: 'TUTOR' }] };
+  await act(async () => { tree.update(element()); await flush(); });
+  const service = (ConversationAppService as jest.Mock).mock.results.at(-1)!.value;
+  await event({ type: 'tool', id: 'invalid-role', plan: { type: 'native', name: 'run_app_action', arguments: { action: 'request_assistance', parameters: {} } } });
+  expect(Alert.alert).not.toHaveBeenCalled();
+  expect(service.run).not.toHaveBeenCalled();
+  expect(mockInject.mock.calls.at(-1)[0]).toContain('"ok":false');
 });
 
 it('starts AI from the lens button during streaming without restarting an active conversation', async () => {

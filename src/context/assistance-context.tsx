@@ -86,10 +86,10 @@ function useAssistanceController() {
       openCall(active);
     } else if (['helpAccepted', 'tutor_finded'].includes(String(data.type)) && role === 'PDV' && ['requesting', 'waiting'].includes(state.phase)) {
       setPhase('accepted'); current.current.phase = 'accepted';
-      setMessage('Tu tutor aceptó. Esperando que inicie la videollamada.');
+      setMessage('Solicitud aceptada. Esperando llamada…');
       void speak('Tu tutor aceptó la solicitud de ayuda.');
     } else if (['helpIgnored', 'tutor_not_available'].includes(String(data.type)) && role === 'PDV' && state.phase === 'waiting') {
-      setMessage('Un tutor no puede responder. Seguimos esperando a tus tutores.');
+      setMessage('Esperando a otro tutor…');
     } else if (data.type === 'finalizeHelp' && state.call) {
       void endCall(false);
     }
@@ -160,7 +160,7 @@ function useAssistanceController() {
       };
       const deadline = setTimeout(() => {
         if (attempt !== revision.current) return;
-        cancel(); setMessage('Ningún tutor inició la llamada. Podés volver a solicitar ayuda.');
+        cancel(); setMessage('Sin respuesta. Volvé a pedir ayuda.');
         void speak('Ningún tutor pudo iniciar la llamada.');
       }, 65000);
       controller.signal.addEventListener('abort', () => clearTimeout(deadline), { once: true });
@@ -182,7 +182,7 @@ function useAssistanceController() {
     try {
       await respondToHelp(state.incoming._id, state.user._id, accepted);
       if (attempt !== revision.current) return;
-      if (accepted) { setPhase('accepted'); current.current.phase = 'accepted'; setMessage('Solicitud aceptada. Podés ver la ubicación e iniciar la videollamada.'); }
+      if (accepted) { setPhase('accepted'); current.current.phase = 'accepted'; setMessage('Solicitud aceptada.'); }
       else { setIncoming(null); current.current.incoming = null; setPhase('idle'); current.current.phase = 'idle'; }
       return { ok: true, phase: current.current.phase };
     } finally { busy.current = false; }
